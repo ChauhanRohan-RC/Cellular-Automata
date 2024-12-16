@@ -12,8 +12,7 @@ public interface AutomataI extends NextStateGeneratorI {
 
     float cellStateAt(int stateIndex);
 
-    @NotNull
-    Color colorFor(float cellState, boolean darkMode);
+    int colorRGBFor(float cellState, boolean darkMode);
 
     default float lowestCellState() {
         return cellStateAt(0);
@@ -23,6 +22,7 @@ public interface AutomataI extends NextStateGeneratorI {
         return cellStateAt(cellStateCount() - 1);
     }
 
+    // TODO: can init random state as seed
     void resetState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled);
 
     void clearState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled);

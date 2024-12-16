@@ -4,6 +4,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.Random;
 
 public class NdArrayF implements NdArrayFloatI {
 
@@ -193,11 +194,27 @@ public class NdArrayF implements NdArrayFloatI {
     }
 
     public void fill(float value) {
-        Arrays.fill(flatArray, value);
+        Arrays.fill(flatArray, 0, size(), value);
     }
 
     public void clear() {
         fill(0f);
+    }
+
+    public void fill(@NotNull FloatGenerator generator) {
+        for (int i = 0; i < size(); i++) {
+            flatArray[i] = generator.nextFloat();
+        }
+    }
+
+    public void fillRandFloat(final float lowInclusive, final float highExclusive) {
+        final Random rand = new Random();
+        fill(() -> rand.nextFloat(lowInclusive, highExclusive));
+    }
+
+    public void fillRandInt(final int lowInclusive, final int highExclusive) {
+        final Random rand = new Random();
+        fill(() -> rand.nextInt(lowInclusive, highExclusive));
     }
 
 

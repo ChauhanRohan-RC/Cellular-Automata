@@ -163,9 +163,35 @@ public class U {
     }
 
 
-    @NotNull
-    public static Color gray255(int gray) {
-        return new Color(gray, gray, gray);
+    /**
+     * @param gray grayscale 0-255
+     * @param alpha alpha channel. 0-255
+     *
+     * @return the argb color
+     */
+    public static int gray255(int gray, int alpha) {
+        gray &= 0xFF;
+        alpha &= 0xFF;
+
+        return (alpha << 24) | (gray << 16) | (gray << 8) | gray;
+    }
+
+    /**
+     * @param gray grayscale 0-255
+     *
+     * @return the argb color
+     */
+    public static int gray255(int gray) {
+        return gray255(gray, 255);
+    }
+
+
+    /**
+     * @param color the color in argb or ahsl format
+     * @return the inverted color (255 - channel) with alpha preserved
+     */
+    public static int invertColor(int color) {
+        return color ^ 0x00FFFFFF;
     }
 
     public static int alpha255(int argb) {

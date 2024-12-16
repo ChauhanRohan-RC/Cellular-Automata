@@ -36,13 +36,17 @@ public class AutomataSimulator {
     @NotNull
     private final Listeners<Listener> listeners = new Listeners<>();
 
-    public AutomataSimulator(@NotNull AutomataI automata, int[] stateShape) {
+    public AutomataSimulator(@NotNull AutomataI automata, int[] stateShape, boolean initRandomState) {
         if (automata.dimensions() != stateShape.length) {
             throw new IllegalArgumentException("Automata and State must have same number of dimensions!!");
         }
 
         this.state = new NdArrayF(stateShape);
         this.automata = automata;
+
+        if (initRandomState) {
+            resetState();
+        }
     }
 
     public int getGeneration() {

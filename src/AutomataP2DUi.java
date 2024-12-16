@@ -1,22 +1,22 @@
 import core.AutomataI;
 import core.ConwayLifeAutomata;
+import core.ZhabotinskyAutomata;
 import core.NdArrayFloatI;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import processing.core.PApplet;
+import processing.core.PGraphics;
 import processing.event.KeyEvent;
 import processing.event.MouseEvent;
 import util.U;
 import util.misc.Log;
 import util.models.Pair;
 
-import java.awt.*;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.SimpleTimeZone;
+
 
 public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener {
-
 
     public static final String TAG = "AutomataUi";
 
@@ -25,7 +25,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
      *
      * @see #enqueueTask(Runnable)
      * @see #handleKeyEvent(KeyEvent)
-     * */
+     */
     private static final int ACTION_EXECUTE_RUNNABLE = 121230123;
 
 
@@ -57,24 +57,24 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
         public final boolean isDark;
 
-        public final Color backgroundDark;
-        public final Color backgroundMedium;
-        public final Color backgroundLight;
+        public final int backgroundDark;
+        public final int backgroundMedium;
+        public final int backgroundLight;
 
-        public final Color foregroundDark;
-        public final Color foregroundMedium;
-        public final Color foregroundLight;
+        public final int foregroundDark;
+        public final int foregroundMedium;
+        public final int foregroundLight;
 
         public final float cellStrokeWeight;
         public final float cellStrokeWeightPlaying;
 
         Theme(boolean isDark,
-              Color backgroundDark,
-              Color backgroundMedium,
-              Color backgroundLight,
-              Color foregroundDark,
-              Color foregroundMedium,
-              Color foregroundLight,
+              int backgroundDark,
+              int backgroundMedium,
+              int backgroundLight,
+              int foregroundDark,
+              int foregroundMedium,
+              int foregroundLight,
               float cellStrokeWeight,
               float cellStrokeWeightPlaying) {
 
@@ -89,6 +89,57 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             this.cellStrokeWeightPlaying = cellStrokeWeightPlaying;
         }
 
+    }
+
+    public interface CellDrawTask {
+
+        void initCellDrawStyle(@NotNull PGraphics g, float strokeWeight, float strokeColor);
+
+        void drawCell(@NotNull PGraphics g, float x, float y, float cellSize, float cellState, int cellColor);
+
+    }
+
+    public enum CellDrawer {
+        SQUARE(new CellDrawTask() {
+            @Override
+            public void initCellDrawStyle(@NotNull PGraphics g, float strokeWeight, float strokeColor) {
+                if (strokeWeight == 0) {
+                    g.noStroke();
+                } else {
+                    g.stroke(strokeColor);
+                    g.strokeWeight(strokeWeight);
+                }
+            }
+
+            @Override
+            public void drawCell(@NotNull PGraphics g, float x, float y, float cellSize, float cellState, int cellColor) {
+                g.fill(cellColor);
+                g.square(x, y, cellSize);
+            }
+        }),
+
+
+        CIRCLE(new CellDrawTask() {
+            @Override
+            public void initCellDrawStyle(@NotNull PGraphics g, float strokeWeight, float strokeColor) {
+                // Don't draw stroke
+                g.noStroke();
+            }
+
+            @Override
+            public void drawCell(@NotNull PGraphics g, float x, float y, float cellSize, float cellState, int cellColor) {
+                g.fill(cellColor);
+                g.circle(x, y, cellSize);
+            }
+        }),
+        ;
+
+        @NotNull
+        public final CellDrawTask cellDrawTask;
+
+        CellDrawer(@NotNull CellDrawTask cellDrawTask) {
+            this.cellDrawTask = cellDrawTask;
+        }
     }
 
 
@@ -106,6 +157,10 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     private AutomataSimulator mSimulator;
 
     boolean playing = false;
+    boolean drawCellStroke = true;
+    @NotNull
+    AutomataP2DUi.CellDrawer cellDrawer = CellDrawer.SQUARE;
+
     float mCellSizePix = 20;
     float mZoom = 1;
 
@@ -184,11 +239,15 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         invalidateFrame(1);
     }
 
+    private void postInvalidateFrame() {
+        enqueueTask(this::invalidateFrame);
+    }
+
 
     private void drawFrame() {
         final Theme theme = mTheme;
 
-        background(theme.backgroundDark.getRGB());
+        background(theme.backgroundDark);
 
         final AutomataSimulator sim = mSimulator;
         NdArrayFloatI state = null;
@@ -202,46 +261,59 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         } else if (state.dimensions() != 2) {
             Log.w(TAG, String.format("Could not draw state %d with dimensions!", state.dimensions()));
         } else {
-
             final int rows = state.shapeAt(0), cols = state.shapeAt(1);
-
-//            mCellSizePix = (float) min(width, height) / min(state.shapeAt(0), state.shapeAt(1));
-//            cellSize = max(cellSize, min(width, height) / 60f);
             mCellSizePix = calCellSizePix(rows, cols);
 
-            // TODO: draw only those cells that appear on screen i.e. within width and height
-
-            AutomataI automata = sim.getAutomata();
             final int draw_rows = min(rows, ceil(height / mCellSizePix));
             final int draw_cols = min(cols, ceil(width / mCellSizePix));
             final int draw_start_row = min(floor(mPanY / mCellSizePix), rows - draw_rows);
             final int draw_start_col = min(floor(mPanX / mCellSizePix), cols - draw_cols);
 
-            if (playing) {
-//                        noStroke();
-                stroke(theme.foregroundLight.getRGB());
-                strokeWeight(theme.cellStrokeWeightPlaying);
+            final AutomataI automata = sim.getAutomata();
+            final PGraphics graphics = getGraphics();
+            final CellDrawer cell_drawer = this.cellDrawer;
+
+            // Drawing stroke is expensive
+            final int strokeColor;
+            final float strokeWeight;
+            if (drawCellStroke) {
+                if (playing) {
+                    strokeColor = theme.foregroundLight;
+                    strokeWeight = theme.cellStrokeWeightPlaying;
+//                    strokeWeight = 0;
+                } else {
+                    strokeColor = theme.foregroundMedium;
+                    strokeWeight = theme.cellStrokeWeight;
+                }
             } else {
-                stroke(theme.foregroundMedium.getRGB());
-                strokeWeight(theme.cellStrokeWeight);
+                strokeColor = 0;
+                strokeWeight = 0;   // No Stroke
             }
 
+            cellDrawer.cellDrawTask.initCellDrawStyle(graphics, strokeWeight, strokeColor);
+
+            float cell_state;
+            int cell_color;
             for (int i = draw_start_row; i < draw_start_row + draw_rows; i++) {
                 for (int j = draw_start_col; j < draw_start_col + draw_cols; j++) {
+                    cell_state = state.get(i, j);
+                    cell_color = automata.colorRGBFor(cell_state, theme.isDark);
 
-                    fill(automata.colorFor(state.get(i, j), theme.isDark).getRGB());
-                    square((j * mCellSizePix) - mPanX, (i * mCellSizePix) - mPanY, mCellSizePix);
+                    cell_drawer.cellDrawTask.drawCell(graphics,
+                            (j * mCellSizePix) - mPanX,
+                            (i * mCellSizePix) - mPanY,
+                            mCellSizePix,
+                            cell_state,
+                            cell_color);
                 }
             }
         }
     }
 
 
-
-
     private static float calCellSizePix(float width, float height, float rows, float cols, float zoom, float defMinCellSizeFactor) {
-        final float asp_disp = (float) width / height;
-        final float asp_grid = (float) cols / rows;
+        final float asp_disp = width / height;
+        final float asp_grid = cols / rows;
         float cellSize;
 
         if (asp_disp >= asp_grid) {
@@ -281,20 +353,20 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     }
 
 
-    private int @NotNull[] getCellIndices(float x, float y) {
-        return new int[] {(int) ((y + mPanY) / mCellSizePix), (int) ((x + mPanX) / mCellSizePix)};
+    private int @NotNull [] getCellIndices(float x, float y) {
+        return new int[]{(int) ((y + mPanY) / mCellSizePix), (int) ((x + mPanX) / mCellSizePix)};
     }
 
-    private float @NotNull[] getCellIndicesF(float x, float y) {
-        return new float[] {((y + mPanY) / mCellSizePix), ((x + mPanX) / mCellSizePix)};
+    private float @NotNull [] getCellIndicesF(float x, float y) {
+        return new float[]{((y + mPanY) / mCellSizePix), ((x + mPanX) / mCellSizePix)};
     }
 
-    private float @NotNull[] getCellPosition(float row_index, float col_index) {
-        return new float[] {(col_index * mCellSizePix) - mPanX, (row_index * mCellSizePix) - mPanY};
+    private float @NotNull [] getCellPosition(float row_index, float col_index) {
+        return new float[]{(col_index * mCellSizePix) - mPanX, (row_index * mCellSizePix) - mPanY};
     }
 
 
-    private int @Nullable[] stepCellState(float x, float y, boolean stepUp, int @Nullable[] prevCellIndices) {
+    private int @Nullable [] stepCellState(float x, float y, boolean stepUp, int @Nullable [] prevCellIndices) {
         final AutomataSimulator sim = mSimulator;
         if (sim != null) {
             final int[] indices = getCellIndices(x, y);
@@ -322,7 +394,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
     /**
      * Enqueue a custom task to be executed on the UI thread
-     * */
+     */
     public final void enqueueTask(@NotNull Runnable task) {
         postEvent(new KeyEvent(task, millis(), ACTION_EXECUTE_RUNNABLE, 0, (char) 0, 0, false));
     }
@@ -380,6 +452,8 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                 AutomataSimulator sim = mSimulator;
                 if (sim != null) {
                     Log.d(TAG, "CLEAR_STATE");
+                    playing = false;
+                    Log.d(TAG, "Playing: " + playing);
                     sim.clearState();
                 }
             }
@@ -387,6 +461,18 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             case java.awt.event.KeyEvent.VK_T -> {
                 // Switch theme
                 mTheme = U.cycleEnum(Theme.class, mTheme);
+                invalidateFrame();
+            }
+
+            case java.awt.event.KeyEvent.VK_O -> {
+                drawCellStroke = !drawCellStroke;
+                Log.d(TAG, "CELL_STROKE: " + drawCellStroke);
+                invalidateFrame();
+            }
+
+            case java.awt.event.KeyEvent.VK_S -> {
+                cellDrawer = U.cycleEnum(CellDrawer.class, cellDrawer);
+                Log.d(TAG, "CELL_SHAPE: " + cellDrawer);
                 invalidateFrame();
             }
         }
@@ -408,8 +494,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     }
 
 
-
-    private int @Nullable[] mLastMouseCellIndices;
+    private int @Nullable [] mLastMouseCellIndices;
     private float mPanX;
     private float mPanY;
     @Nullable
@@ -430,7 +515,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         mPanY = constrain(mPanY + delPanY, 0, maxPanXY.second);
 
         if (prevPanX != mPanX || prevPanY != mPanY) {
-            Log.d(TAG,"PAN_X: " + mPanX + ", PAN_Y: " + mPanY);
+            Log.d(TAG, "PAN_X: " + mPanX + ", PAN_Y: " + mPanY);
             invalidateFrame();
             return true;
         }
@@ -444,7 +529,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             return;
 
         final float prevZoom = mZoom;
-        float newZoom = prevZoom * (1 + ((zoomIn? 1:-1) * 0.05f));
+        float newZoom = prevZoom * (1 + ((zoomIn ? 1 : -1) * 0.05f));
         newZoom = constrain(newZoom, 0.01f, 50);
 
         if (newZoom != prevZoom) {
@@ -540,6 +625,9 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
     public synchronized void setSimulator(@Nullable AutomataSimulator simulator) {
         final AutomataSimulator old = mSimulator;
+        if (old == simulator)
+            return;
+
         // Detach
         if (old != null) {
             old.removeListener(this);
@@ -551,58 +639,50 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             simulator.ensureListener(this);
         }
 
-        if (simulator != old) {
-            onSimulatorChanged(old, simulator);
-        }
-
-        invalidateFrame();
+        onSimulatorChanged(old, simulator);
     }
 
     protected void onSimulatorChanged(@Nullable AutomataSimulator old, @Nullable AutomataSimulator _new) {
-        resetZoomAndPan();
+        enqueueTask(() -> {
+            resetZoomAndPan();
+            invalidateFrame();
+        });
     }
 
 
     @Override
     public void onAutomataStateChanged(AutomataSimulator simulator, @Nullable NdArrayFloatI oldState, @NotNull NdArrayFloatI newState, int generation, int stepInGeneration) {
         Log.d(TAG, "STATE_CHANGED: gen=" + generation + ", step=" + stepInGeneration);
-        invalidateFrame();
+        postInvalidateFrame();
     }
 
     @Override
     public void onAutomataGenerationChanged(AutomataSimulator simulator, @Nullable NdArrayFloatI oldGen, @NotNull NdArrayFloatI newGen, int generation, int steps) {
         Log.d(TAG, "GEN_CHANGED: " + generation);
-        invalidateFrame();
+        postInvalidateFrame();
     }
 
     @Override
     public void onAutomataCellStateChanged(AutomataSimulator simulator, @NotNull NdArrayFloatI state, int[] cellIndices) {
         Log.d(TAG, "CELL_STATE_CHANGED: " + Arrays.toString(cellIndices));
-        invalidateFrame();
+        postInvalidateFrame();
     }
-
 
 
     // ------------------------------------------------
 
     public static void main(String[] args) {
         Log.init();
-        Log.setDebug(true);
+        Log.setDebug(false);
 
-        AutomataSimulator simulator = new AutomataSimulator(new ConwayLifeAutomata(), new int[] {200, 300});
+        final int[] state_shape = {300, 460};
+        final AutomataI automata = new ZhabotinskyAutomata().setMonoChrome(true);
+//        final AutomataI automata = new ConwayLifeAutomata();
+
+        final AutomataSimulator simulator = new AutomataSimulator(automata, state_shape, true);
 //        simulator.setGenerationSteps(2);
 
         final AutomataP2DUi app = new AutomataP2DUi(simulator);
         PApplet.runSketch(concat(new String[]{app.getClass().getName()}, args), app);
-
-//        if (simulator != null) {
-//            simulator.nextGeneration();
-//            Log.d(TAG, "Next Gen START");
-//            long st = System.currentTimeMillis();
-//            simulator.nextGeneration();
-//            long et = System.currentTimeMillis();
-//            Log.d(TAG, "Next Gen END: " + (et - st) + " ms");
-//        }
-
     }
 }

@@ -6,6 +6,9 @@ import java.awt.*;
 
 public class ConwayLifeAutomata implements AutomataI {
 
+    private static final int COLOR_ON = Color.BLACK.getRGB();
+    private static final int COLOR_OFF = Color.WHITE.getRGB();
+
     @Override
     public int dimensions() {
         return 2;
@@ -22,14 +25,13 @@ public class ConwayLifeAutomata implements AutomataI {
     }
 
     @Override
-    @NotNull
-    public Color colorFor(float cellState, boolean darkMode) {
+    public int colorRGBFor(float cellState, boolean darkMode) {
         final boolean on = cellState - 0.5 > 0;
         if (darkMode) {
-            return on? Color.WHITE : Color.BLACK;
+            return on? COLOR_OFF : COLOR_ON;
         }
 
-        return on? Color.BLACK : Color.WHITE;
+        return on? COLOR_ON : COLOR_OFF;
     }
 
     @Override
@@ -38,12 +40,12 @@ public class ConwayLifeAutomata implements AutomataI {
         final int cols = curState.shapeAt(1);
 
         final int[][] out_arr = new int[8][2];
-        float cell_state;
+        int cell_state;
         int neigh_count;
 
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                cell_state = curState.get(i, j);
+                cell_state = (int) curState.get(i, j);
                 neigh_count = NdArrayF.getNeighbourIndices2D(rows, cols, i, j, wrapEnabled, out_arr);
 
                 float neigh_state_sum = 0;
@@ -65,7 +67,8 @@ public class ConwayLifeAutomata implements AutomataI {
 
     @Override
     public void resetState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
-        outState.clear();
+//        outState.clear();
+        outState.fillRandInt(0, 2);
     }
 
     @Override
