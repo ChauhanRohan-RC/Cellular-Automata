@@ -1,5 +1,10 @@
 package core;
 
+/**
+ * Immutable interface of an N-Dimensional float array
+ * <br>
+ * NOTE: ONLY GETTER METHODS
+ * */
 public interface NdArrayFloatI {
 
     @FunctionalInterface
@@ -17,8 +22,14 @@ public interface NdArrayFloatI {
 
     int size();
 
+    default boolean isEmpty() {
+        return size() == 0;
+    }
+
     boolean areIndicesValid(int... indices);
 
     float get(int... indices);
+
+    float getAverage();
 
 }

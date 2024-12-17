@@ -1,7 +1,4 @@
-import core.AutomataI;
-import core.ConwayLifeAutomata;
-import core.ZhabotinskyAutomata;
-import core.NdArrayFloatI;
+import core.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import processing.core.PApplet;
@@ -129,7 +126,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             @Override
             public void drawCell(@NotNull PGraphics g, float x, float y, float cellSize, float cellState, int cellColor) {
                 g.fill(cellColor);
-                g.circle(x, y, cellSize);
+                g.circle(x + cellSize / 2, y + cellSize / 2, cellSize);
             }
         }),
         ;
@@ -156,7 +153,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     @Nullable
     private AutomataSimulator mSimulator;
 
-    boolean playing = false;
+//    boolean playing = false;
     boolean drawCellStroke = true;
     @NotNull
     AutomataP2DUi.CellDrawer cellDrawer = CellDrawer.SQUARE;
@@ -216,12 +213,12 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     }
 
     public void postDraw() {
-        // TODO: move it to a different thread for better control of timings
-        final AutomataSimulator sim = mSimulator;
-        if (playing && sim != null && frameCount % 2 == 0) {
-            Log.d(TAG, "Creating GEN: " + (sim.getGeneration() + 1));
-            sim.nextGeneration();
-        }
+
+//        final AutomataSimulator sim = mSimulator;
+//        if (playing && sim != null && frameCount % 2 == 0) {
+//            Log.d(TAG, "Creating GEN: " + (sim.getGeneration() + 1));
+//            sim.nextGenerationSync(null);
+//        }
 
     }
 
@@ -277,7 +274,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             final int strokeColor;
             final float strokeWeight;
             if (drawCellStroke) {
-                if (playing) {
+                if (sim.isPlaying()) {
                     strokeColor = theme.foregroundLight;
                     strokeWeight = theme.cellStrokeWeightPlaying;
 //                    strokeWeight = 0;
@@ -429,8 +426,13 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
         switch (event.getKeyCode()) {
             case java.awt.event.KeyEvent.VK_SPACE -> {
-                playing = !playing;
-                Log.d(TAG, "Playing: " + playing);
+                AutomataSimulator sim = mSimulator;
+                if (sim != null) {
+                    sim.togglePlaying();
+                }
+
+//                playing = !playing;
+//                Log.d(TAG, "Playing: " + playing);
                 invalidateFrame();
             }
 
@@ -440,10 +442,10 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                 } else {
                     AutomataSimulator sim = mSimulator;
                     if (sim != null) {
-                        Log.d(TAG, "RESET_STATE");
-                        playing = false;
-                        Log.d(TAG, "Playing: " + playing);
-                        sim.resetState();
+//                        Log.d(TAG, "RESET_STATE");
+//                        playing = false;
+//                        Log.d(TAG, "Playing: " + playing);
+                        sim.resetStateAsync();
                     }
                 }
             }
@@ -451,10 +453,10 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             case java.awt.event.KeyEvent.VK_C -> {
                 AutomataSimulator sim = mSimulator;
                 if (sim != null) {
-                    Log.d(TAG, "CLEAR_STATE");
-                    playing = false;
-                    Log.d(TAG, "Playing: " + playing);
-                    sim.clearState();
+//                    Log.d(TAG, "CLEAR_STATE");
+//                    playing = false;
+//                    Log.d(TAG, "Playing: " + playing);
+                    sim.clearStateAsync();
                 }
             }
 
@@ -645,10 +647,25 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     protected void onSimulatorChanged(@Nullable AutomataSimulator old, @Nullable AutomataSimulator _new) {
         enqueueTask(() -> {
             resetZoomAndPan();
-            invalidateFrame();
         });
     }
 
+
+    @Override
+    public void onIsPlayingChanged(@NotNull AutomataSimulator simulator, boolean isPlaying) {
+        Log.d(TAG, "SIM_PLAYING: " + isPlaying);
+        postInvalidateFrame();
+    }
+
+    @Override
+    public void onGenerationStepsChanged(@NotNull AutomataSimulator simulator, int prevGenSteps, int newGenSteps) {
+        Log.d(TAG, "GENERATION_STEPS: " + newGenSteps);
+    }
+
+    @Override
+    public void onWrapEnabledChanged(@NotNull AutomataSimulator simulator, boolean wrapEnabled) {
+        Log.d(TAG, "WRAP_ENABLED: " + wrapEnabled);
+    }
 
     @Override
     public void onAutomataStateChanged(AutomataSimulator simulator, @Nullable NdArrayFloatI oldState, @NotNull NdArrayFloatI newState, int generation, int stepInGeneration) {
@@ -678,6 +695,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         final int[] state_shape = {300, 460};
         final AutomataI automata = new ZhabotinskyAutomata().setMonoChrome(true);
 //        final AutomataI automata = new ConwayLifeAutomata();
+//        final AutomataI automata = new NLifeAutomata();
 
         final AutomataSimulator simulator = new AutomataSimulator(automata, state_shape, true);
 //        simulator.setGenerationSteps(2);

@@ -1,8 +1,10 @@
 package core;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
+import java.util.concurrent.ThreadPoolExecutor;
 
 public class ConwayLifeAutomata implements AutomataI {
 
@@ -35,7 +37,7 @@ public class ConwayLifeAutomata implements AutomataI {
     }
 
     @Override
-    public void nextState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
+    public void nextState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
         final int rows = curState.shapeAt(0);
         final int cols = curState.shapeAt(1);
 
@@ -66,13 +68,13 @@ public class ConwayLifeAutomata implements AutomataI {
     }
 
     @Override
-    public void resetState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
+    public void resetState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
 //        outState.clear();
         outState.fillRandInt(0, 2);
     }
 
     @Override
-    public void clearState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
+    public void clearState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
         outState.clear();
     }
 

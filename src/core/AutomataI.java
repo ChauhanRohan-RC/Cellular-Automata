@@ -1,8 +1,9 @@
 package core;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.awt.*;
+import java.util.concurrent.ThreadPoolExecutor;
 
 public interface AutomataI extends NextStateGeneratorI {
 
@@ -23,9 +24,9 @@ public interface AutomataI extends NextStateGeneratorI {
     }
 
     // TODO: can init random state as seed
-    void resetState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled);
+    void resetState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled);
 
-    void clearState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled);
+    void clearState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled);
 
     /**
      * Changes a cell state on UI Events

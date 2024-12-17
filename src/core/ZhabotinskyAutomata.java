@@ -6,15 +6,28 @@ import org.jetbrains.annotations.Nullable;
 import util.U;
 
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * An automata modelling the Belousov-Zhabotinsky Reaction
- * */
-public class ZhabotinskyAutomata implements AutomataI {
+ */
+public class ZhabotinskyAutomata extends NStateAutomataI {
 
-    private static int toInt(float value) {
-        return (int) value;
-    }
+
+    public static final int DEF_N = 99;
+    public static final float DEF_K1 = 2;
+    public static final float DEF_K2 = 3;
+    public static final int DEF_G = 35;
+
+    private static final boolean DEF_MONOCHROME = true;
+
+    private static final boolean DEF_PARALLEL_COMPUTE_ENABLED = true;
+    private static final int DEF_PARALLEL_COMPUTE_MIN_CELLS_PER_THREAD = 10000;
+
+
 
     @NotNull
     private static IntIntHashMap createColorMap(int n, boolean monoChrome) {
@@ -33,7 +46,7 @@ public class ZhabotinskyAutomata implements AutomataI {
                 float y_n = (float) ((Math.pow(min_saturation, order) - 1) * ((float) i / n) + 1);
                 float y = (float) Math.pow(y_n, 1 / order);
 
-                cmap.put(i, Color.getHSBColor(20/360f, y, 1).getRGB());
+                cmap.put(i, Color.getHSBColor(20 / 360f, y, 1).getRGB());
             }
         } else {
             cmap.put(0, U.gray255(255));    // HEALTHY
@@ -49,43 +62,18 @@ public class ZhabotinskyAutomata implements AutomataI {
     }
 
 
-
-    public static final int DEF_N = 99;
-    public static final float DEF_K1 = 2;
-    public static final float DEF_K2 = 3;
-    public static final int DEF_G = 35;
-
-    private static final boolean DEF_MONOCHROME = true;
-
-
-    /**
-     * No of states = n + 1, where n >= 1 <br>
-     * Possible integer states = [0, n]
-     *
-     * <pre>
-     *     {@code
-     *          0 : Healthy cell
-     *          [1, n-1] : Infected cell (varying degree of infection)
-     *          n : Ill cell
-     *     }
-     * </pre>
-     *
-     * @see #DEF_N
-     */
-    private final int n;
-
     /**
      * Constant K1, in range [1, 8]
      *
      * @see #DEF_K1
-     * */
+     */
     private final float k1;
 
     /**
      * Constant K2, in range [1, 8]
      *
      * @see #DEF_K2
-     * */
+     */
     private final float k2;
 
     /**
@@ -93,26 +81,16 @@ public class ZhabotinskyAutomata implements AutomataI {
      * Mostly, g < n
      *
      * @see #DEF_G
-     * */
+     */
     private final int g;
 
-    private boolean monoChrome = DEF_MONOCHROME;
-
-    /**
-     * Color code of each possible state, for {@code LIGHT} theme <br>
-     * Colors are inverted for {@code DARK} theme using {@link U#invertColor(int)}
-     * */
-    @NotNull
-    private IntIntHashMap colorMap;
+    private boolean parallelComputeEnabled = DEF_PARALLEL_COMPUTE_ENABLED;
 
     public ZhabotinskyAutomata(int n, float k1, float k2, int g, boolean monoChrome) {
-        this.n = n;
+        super(n, monoChrome);
         this.k1 = k1;
         this.k2 = k2;
         this.g = g;
-
-        this.monoChrome = monoChrome;
-        this.colorMap = createColorMap(n, monoChrome);
     }
 
     public ZhabotinskyAutomata(int n) {
@@ -120,7 +98,7 @@ public class ZhabotinskyAutomata implements AutomataI {
     }
 
     public ZhabotinskyAutomata() {
-        this(DEF_N, DEF_K1, DEF_K2, DEF_G, DEF_MONOCHROME);
+        this(DEF_N);
     }
 
 
@@ -129,72 +107,33 @@ public class ZhabotinskyAutomata implements AutomataI {
         return 2;
     }
 
+
     @Override
-    public int cellStateCount() {
-        return n + 1;
+    protected @NotNull IntIntHashMap createLightThemeColorMap(boolean monoChrome) {
+        return createColorMap(n, monoChrome);
     }
 
-    @Override
-    public float cellStateAt(int stateIndex) {
-        return stateIndex;
+
+    public boolean isParallelComputeEnabled() {
+        return parallelComputeEnabled;
     }
 
-    @Override
-    public int colorRGBFor(float cellState, boolean darkMode) {
-        final int c = colorMap.get(toInt(cellState));
-        return darkMode? U.invertColor(c) : c;
+    public void setParallelComputeEnabled(boolean parallelComputeEnabled) {
+        this.parallelComputeEnabled = parallelComputeEnabled;
     }
 
-    @Override
-    public void resetState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
-//        outState.clear();
-        outState.fillRandInt(0, n + 1);
-    }
-
-    @Override
-    public void clearState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
-        outState.clear();
-    }
-
-    @Override
-    public boolean cycleCellState(@NotNull NdArrayF state, int[] cellIndices) {
-        float prev = state.get(cellIndices);
-        int _new = toInt(prev) + 1;
-        if (_new > n) {
-            _new = 0;
-        }
-
-        if (prev != _new) {
-            state.set(_new, cellIndices);
-            return true;
-        }
-
-        return false;
-    }
-
-    @Override
-    public boolean stepCellState(@NotNull NdArrayF state, int[] cellIndices, boolean stepUp) {
-        float prev = state.get(cellIndices);
-        int _new = U.constrain(toInt(prev) + (stepUp? 1: -1), 0, n);
-        if (prev != _new) {
-            state.set(_new, cellIndices);
-            return true;
-        }
-
-        return false;
-    }
-
-    @Override
-    public void nextState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
-        final int rows = curState.shapeAt(0);
-        final int cols = curState.shapeAt(1);
-
+    private void doWork(@NotNull NdArrayF curState,
+                        @NotNull NdArrayF outState,
+                        boolean wrapEnabled,
+                        int rows, int cols,
+                        int row_start, int row_end,
+                        int col_start, int col_end) {
         final int[][] neigh_arr = new int[8][2];
         int neigh_count;
         int cell_state, new_state;
 
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
+        for (int i = row_start; i < row_end; i++) {
+            for (int j = col_start; j < col_end; j++) {
                 cell_state = toInt(curState.get(i, j));
 
                 if (cell_state == n) {
@@ -232,26 +171,57 @@ public class ZhabotinskyAutomata implements AutomataI {
                 outState.set(new_state, i, j);
             }
         }
-
     }
 
+    @Override
+    public void nextState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
+        final int rows = curState.shapeAt(0);
+        final int cols = curState.shapeAt(1);
 
-    /* COLOR MAP --------------------------- */
+        final Runnable do_now = () -> doWork(curState, outState, wrapEnabled, rows, cols, 0, rows, 0, cols);
 
-    public boolean isMonoChrome() {
-        return monoChrome;
-    }
+        final int min_cells_per_thread = DEF_PARALLEL_COMPUTE_MIN_CELLS_PER_THREAD;
 
-    public ZhabotinskyAutomata setMonoChrome(boolean monoChrome) {
-        if (this.monoChrome != monoChrome) {
-            this.monoChrome = monoChrome;
-            this.colorMap = createColorMap(n, monoChrome);
+        if (!parallelComputeEnabled ||
+                executor == null ||
+                executor.isShutdown() ||
+                executor.getCorePoolSize() < 2 ||
+                executor.getMaximumPoolSize() < 3 ||
+                rows * cols <= min_cells_per_thread) {
+
+            do_now.run();
+        } else {
+            // Split rows equally among workers
+
+            final int workers = Math.min(rows * cols / min_cells_per_thread, executor.getMaximumPoolSize() - 1);
+            if (workers < 2 || rows < workers) {
+                do_now.run();
+            } else {
+                List<Callable<Void>> tasks = new ArrayList<>();
+                int rows_per_worker = rows / workers;
+
+                for (int i = 0; i < workers - 1; i++) {
+                    final int row_start = i * rows_per_worker;
+                    final int row_end = row_start + rows_per_worker;
+                    tasks.add(() -> {
+                        doWork(curState, outState, wrapEnabled, rows, cols, row_start, row_end, 0, cols);
+                        return null;
+                    });
+                }
+
+                // last worker
+                tasks.add(() -> {
+                    doWork(curState, outState, wrapEnabled, rows, cols, (workers - 1) * rows_per_worker, rows, 0, cols);
+                    return null;
+                });
+
+                try {
+                    executor.invokeAll(tasks);
+                } catch (InterruptedException e) {
+                    System.err.println("Interrupted while waiting for tasks: " + e);
+                }
+            }
         }
 
-        return this;
-    }
-
-    public ZhabotinskyAutomata toggleMonoChrome() {
-        return setMonoChrome(!isMonoChrome());
     }
 }

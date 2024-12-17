@@ -217,6 +217,21 @@ public class NdArrayF implements NdArrayFloatI {
         fill(() -> rand.nextInt(lowInclusive, highExclusive));
     }
 
+    @Override
+    public float getAverage() {
+        final float size = size();
+        float avg = 0;
+
+        if (size > 0) {
+            for (int i = 0; i < size; i++) {
+                avg += flatArray[i];
+            }
+
+            avg /= size;
+        }
+
+        return avg;
+    }
 
     @Override
     public boolean equals(Object o) {
