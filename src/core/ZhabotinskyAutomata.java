@@ -2,20 +2,14 @@ package core;
 
 import com.jogamp.common.util.IntIntHashMap;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import util.U;
 
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * An automata modelling the Belousov-Zhabotinsky Reaction
  */
 public class ZhabotinskyAutomata extends NStateAutomataI {
-
 
     public static final int DEF_N = 99;
     public static final float DEF_K1 = 2;
@@ -24,9 +18,7 @@ public class ZhabotinskyAutomata extends NStateAutomataI {
 
     private static final boolean DEF_MONOCHROME = true;
 
-    private static final boolean DEF_PARALLEL_COMPUTE_ENABLED = true;
-    private static final int DEF_PARALLEL_COMPUTE_MIN_CELLS_PER_THREAD = 10000;
-
+    public static final boolean DEF_PARALLEL_COMPUTE_ALLOWED = true;
 
 
     @NotNull
@@ -84,8 +76,6 @@ public class ZhabotinskyAutomata extends NStateAutomataI {
      */
     private final int g;
 
-    private boolean parallelComputeEnabled = DEF_PARALLEL_COMPUTE_ENABLED;
-
     public ZhabotinskyAutomata(int n, float k1, float k2, int g, boolean monoChrome) {
         super(n, monoChrome);
         this.k1 = k1;
@@ -114,32 +104,28 @@ public class ZhabotinskyAutomata extends NStateAutomataI {
     }
 
 
-    public boolean isParallelComputeEnabled() {
-        return parallelComputeEnabled;
+    @Override
+    public boolean isParallelComputeAllowed() {
+        return DEF_PARALLEL_COMPUTE_ALLOWED;
     }
 
-    public void setParallelComputeEnabled(boolean parallelComputeEnabled) {
-        this.parallelComputeEnabled = parallelComputeEnabled;
-    }
-
-    private void doWork(@NotNull NdArrayF curState,
+    @Override
+    protected void subCompute(@NotNull NdArrayF curState,
                         @NotNull NdArrayF outState,
                         boolean wrapEnabled,
-                        int rows, int cols,
-                        int row_start, int row_end,
-                        int col_start, int col_end) {
+                        int row_start, int row_end) {
         final int[][] neigh_arr = new int[8][2];
         int neigh_count;
         int cell_state, new_state;
 
         for (int i = row_start; i < row_end; i++) {
-            for (int j = col_start; j < col_end; j++) {
+            for (int j = 0; j < curState.shapeAt(1); j++) {
                 cell_state = toInt(curState.get(i, j));
 
                 if (cell_state == n) {
                     new_state = 0;      // ILL CELL -> HEALTHY CELL
                 } else {
-                    neigh_count = NdArrayF.getNeighbourIndices2D(rows, cols, i, j, wrapEnabled, neigh_arr);
+                    neigh_count = NdArrayF.getNeighbourIndices2D(curState.shapeAt(0), curState.shapeAt(1), i, j, wrapEnabled, neigh_arr);
 
                     float states_sum = cell_state;
                     int neigh_state;
@@ -173,55 +159,4 @@ public class ZhabotinskyAutomata extends NStateAutomataI {
         }
     }
 
-    @Override
-    public void nextState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
-        final int rows = curState.shapeAt(0);
-        final int cols = curState.shapeAt(1);
-
-        final Runnable do_now = () -> doWork(curState, outState, wrapEnabled, rows, cols, 0, rows, 0, cols);
-
-        final int min_cells_per_thread = DEF_PARALLEL_COMPUTE_MIN_CELLS_PER_THREAD;
-
-        if (!parallelComputeEnabled ||
-                executor == null ||
-                executor.isShutdown() ||
-                executor.getCorePoolSize() < 2 ||
-                executor.getMaximumPoolSize() < 3 ||
-                rows * cols <= min_cells_per_thread) {
-
-            do_now.run();
-        } else {
-            // Split rows equally among workers
-
-            final int workers = Math.min(rows * cols / min_cells_per_thread, executor.getMaximumPoolSize() - 1);
-            if (workers < 2 || rows < workers) {
-                do_now.run();
-            } else {
-                List<Callable<Void>> tasks = new ArrayList<>();
-                int rows_per_worker = rows / workers;
-
-                for (int i = 0; i < workers - 1; i++) {
-                    final int row_start = i * rows_per_worker;
-                    final int row_end = row_start + rows_per_worker;
-                    tasks.add(() -> {
-                        doWork(curState, outState, wrapEnabled, rows, cols, row_start, row_end, 0, cols);
-                        return null;
-                    });
-                }
-
-                // last worker
-                tasks.add(() -> {
-                    doWork(curState, outState, wrapEnabled, rows, cols, (workers - 1) * rows_per_worker, rows, 0, cols);
-                    return null;
-                });
-
-                try {
-                    executor.invokeAll(tasks);
-                } catch (InterruptedException e) {
-                    System.err.println("Interrupted while waiting for tasks: " + e);
-                }
-            }
-        }
-
-    }
 }

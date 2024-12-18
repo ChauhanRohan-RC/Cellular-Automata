@@ -11,7 +11,7 @@ import java.util.concurrent.ThreadPoolExecutor;
  * Base class for N-State Automata <br>
  * Cells can have integer states in range [0, n], n >= 1. Total States = n + 1
  * */
-public abstract class NStateAutomataI implements AutomataI {
+public abstract class NStateAutomataI extends AbstractAutomataI {
 
     protected static int toInt(float value) {
         return (int) value;

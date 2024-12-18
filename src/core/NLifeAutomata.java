@@ -15,6 +15,20 @@ import java.util.concurrent.ThreadPoolExecutor;
  * */
 public class NLifeAutomata extends NStateAutomataI {
 
+    public static final int DEF_N = 4;
+
+    // Constants  k1, k2, k3, k4 in range [0, 8N or 900]
+    public static final int DEF_K1 = 8;
+    public static final int DEF_K2 = 12;
+    public static final int DEF_K3 = 8;
+    public static final int DEF_K4 = 9;
+
+    private static final boolean DEF_MONOCHROME = false;
+
+    private static final boolean DEF_PARALLEL_COMPUTE_ALLOWED = true;
+
+
+
     @NotNull
     private static IntIntHashMap createColorMap(int n, boolean monoChrome) {
         final IntIntHashMap cmap = new IntIntHashMap();
@@ -49,17 +63,6 @@ public class NLifeAutomata extends NStateAutomataI {
 
 
 
-    public static final int DEF_N = 4;
-
-    // Constants  k1, k2, k3, k4 in range [0, 8N or 900]
-    public static final int DEF_K1 = 8;
-    public static final int DEF_K2 = 12;
-    public static final int DEF_K3 = 8;
-    public static final int DEF_K4 = 9;
-
-    private static final boolean DEF_MONOCHROME = false;
-
-
     /**
      * Constants K1, K2, K3 and K4
      *
@@ -70,12 +73,16 @@ public class NLifeAutomata extends NStateAutomataI {
      * */
     private final int k1, k2, k3, k4;
 
+    private final float mHalfN;
+
     public NLifeAutomata(int n, int k1, int k2, int k3, int k4, boolean monoChrome) {
         super(n, monoChrome);
         this.k1 = k1;
         this.k2 = k2;
         this.k3 = k3;
         this.k4 = k4;
+
+        mHalfN = (float) this.n / 2;
     }
 
     public NLifeAutomata(int n) {
@@ -98,26 +105,27 @@ public class NLifeAutomata extends NStateAutomataI {
     }
 
     @Override
-    public void nextState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
-        final int rows = curState.shapeAt(0);
-        final int cols = curState.shapeAt(1);
+    public boolean isParallelComputeAllowed() {
+        return DEF_PARALLEL_COMPUTE_ALLOWED;
+    }
 
-        final float half_max = (float) n / 2;
+    @Override
+    protected void subCompute(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled, int row_start, int row_end) {
         final int[][] neigh_arr = new int[8][2];
         int neigh_count;
         int cell_state, new_state;
 
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
+        for (int i = row_start; i < row_end; i++) {
+            for (int j = 0; j < curState.shapeAt(1); j++) {
                 cell_state = toInt(curState.get(i, j));
 
-                neigh_count = NdArrayF.getNeighbourIndices2D(rows, cols, i, j, wrapEnabled, neigh_arr);
+                neigh_count = NdArrayF.getNeighbourIndices2D(curState.shapeAt(0), curState.shapeAt(1), i, j, wrapEnabled, neigh_arr);
                 float neigh_states_sum = 0;
                 for (int k = 0; k < neigh_count; k++) {
                     neigh_states_sum += toInt(curState.get(neigh_arr[k]));
                 }
 
-                if (cell_state > half_max) {
+                if (cell_state > mHalfN) {
                     if (neigh_states_sum >= k1 && neigh_states_sum <= k2) {
                         new_state = cell_state + 1;
                     } else {
@@ -135,6 +143,5 @@ public class NLifeAutomata extends NStateAutomataI {
                 outState.set(new_state, i, j);
             }
         }
-
     }
 }

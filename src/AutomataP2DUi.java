@@ -369,7 +369,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             final int[] indices = getCellIndices(x, y);
 
             if (sim.getState().areIndicesValid(indices)) {
-                invalidateFrame();
+//                invalidateFrame();
                 if (!Arrays.equals(indices, prevCellIndices)) {
                     boolean changed = sim.stepCellState(indices, stepUp);
                 }
@@ -652,6 +652,16 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
 
     @Override
+    public void onSimulationFrameRateChanged(@NotNull AutomataSimulator simulator, long oldFrameRate, long newFrameRate) {
+        Log.d(TAG, "SIM_FRAME_RATE: " + newFrameRate + " fps");
+    }
+
+    @Override
+    public void onSimulationRunModeChanged(@NotNull AutomataSimulator simulator, AutomataSimulator.@NotNull RunMode oldRunMode, AutomataSimulator.@NotNull RunMode newRunMode) {
+        Log.d(TAG, "SIM_RUN_MODE: " + newRunMode);
+    }
+
+    @Override
     public void onIsPlayingChanged(@NotNull AutomataSimulator simulator, boolean isPlaying) {
         Log.d(TAG, "SIM_PLAYING: " + isPlaying);
         postInvalidateFrame();
@@ -690,14 +700,16 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
     public static void main(String[] args) {
         Log.init();
-        Log.setDebug(false);
+        Log.setDebug(true);
 
         final int[] state_shape = {300, 460};
-        final AutomataI automata = new ZhabotinskyAutomata().setMonoChrome(true);
-//        final AutomataI automata = new ConwayLifeAutomata();
+//        final AutomataI automata = new ZhabotinskyAutomata().setMonoChrome(true);
+        final AutomataI automata = new ConwayLifeAutomata();
 //        final AutomataI automata = new NLifeAutomata();
 
         final AutomataSimulator simulator = new AutomataSimulator(automata, state_shape, true);
+        simulator.setSimulationFrameRate(10);
+        simulator.setSimulationRunMode(AutomataSimulator.RunMode.SCHEDULE_FIXED_RATE);
 //        simulator.setGenerationSteps(2);
 
         final AutomataP2DUi app = new AutomataP2DUi(simulator);

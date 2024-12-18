@@ -4,13 +4,12 @@ import core.NdArrayFloatI;
 import core.NextStateGeneratorI;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import util.async.Async;
 import util.async.BiConsumer;
 import util.async.CancellationProvider;
 import util.async.Canceller;
 import util.live.Listeners;
 
-import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -22,9 +21,14 @@ public class AutomataSimulator {
     public static final boolean DEF_PAUSE_ON_RESET_OR_CLEAR = true;
 
     public static final long DEF_SIM_FRAME_RATE = 60;
+    public static final RunMode DEF_SIM_Run_MODE = RunMode.LOOP;
 
 
     public interface Listener {
+
+        void onSimulationFrameRateChanged(@NotNull AutomataSimulator simulator, long oldFrameRate, long newFrameRate);
+
+        void onSimulationRunModeChanged(@NotNull AutomataSimulator simulator, @NotNull RunMode oldRunMode, @NotNull RunMode newRunMode);
 
         void onIsPlayingChanged(@NotNull AutomataSimulator simulator, boolean isPlaying);
 
@@ -38,6 +42,27 @@ public class AutomataSimulator {
 
         void onAutomataCellStateChanged(AutomataSimulator simulator, @NotNull NdArrayFloatI state, int[] cellIndices);
 
+    }
+
+    public enum RunMode {
+        /**
+         * Schedule simulation task with a fixed rate using {@link ScheduledThreadPoolExecutor#scheduleAtFixedRate(Runnable, long, long, TimeUnit)}
+         *
+         * @see #setSimulationFrameRate(long)
+         * */
+        SCHEDULE_FIXED_RATE(true),
+
+        /**
+         * Run simulation task continuously in a while loop, irrespective of the Frame rate
+         * */
+        LOOP(false),
+        ;
+
+        public final boolean frameRateDependent;
+
+        RunMode(boolean frameRateDependent) {
+            this.frameRateDependent = frameRateDependent;
+        }
     }
 
 
@@ -70,12 +95,13 @@ public class AutomataSimulator {
     private final ScheduledThreadPoolExecutor mExecutor;
 
     @Nullable
-    private ScheduledFuture<?> mSimFuture;
+    private Future<?> mSimFuture;
     @Nullable
     private Canceller mSimCanceller;
 
     private volatile boolean mIsPlaying;
 
+    private RunMode mSimRunMode = DEF_SIM_Run_MODE;
     private long mSImFrameRate = DEF_SIM_FRAME_RATE;
 
 //    @NotNull
@@ -120,7 +146,7 @@ public class AutomataSimulator {
 
         // Init
         if (initRandomState) {
-            resetStateSync();
+            resetStateAsync();
         }
     }
 
@@ -338,7 +364,7 @@ public class AutomataSimulator {
             can.cancel(true);
         }
 
-        final ScheduledFuture<?> fut = mSimFuture;
+        final Future<?> fut = mSimFuture;
         mSimFuture = null;
         if (fut != null) {
             fut.cancel(true);
@@ -352,7 +378,7 @@ public class AutomataSimulator {
 
     private long mLastFrameMs = -1;
 
-    private void enqueueSimTaskInternal() {
+    private void requeueSimTaskInternal() {
         cancelSimTaskInternal();
 
         final Canceller canceller = Canceller.basic();
@@ -372,7 +398,30 @@ public class AutomataSimulator {
 //            }
         };
 
-        mSimFuture = mExecutor.scheduleAtFixedRate(task, 0L, (long) (1e9 / mSImFrameRate), TimeUnit.NANOSECONDS);
+        switch (mSimRunMode) {
+            case SCHEDULE_FIXED_RATE -> {
+                final long period_ns = (long) (1e9 / mSImFrameRate);
+                mSimFuture = mExecutor.scheduleAtFixedRate(task, 0L, period_ns, TimeUnit.NANOSECONDS);
+            }
+
+            case LOOP -> {
+
+                // LOOP the task constantly
+                final Runnable looper = () -> {
+                    while (!canceller.isCancelled()) {
+                        task.run();
+                    }
+                };
+
+                mSimFuture = mExecutor.submit(looper);
+            }
+
+            default -> {
+                throw new AssertionError("Unexpected sim run mode: " + mSimRunMode);
+            }
+        }
+
+
     }
 
     public void setPlaying(boolean playing) {
@@ -387,7 +436,7 @@ public class AutomataSimulator {
 
             mIsPlaying = playing;
             if (playing) {
-                enqueueSimTaskInternal();
+                requeueSimTaskInternal();
             } else {
                 cancelSimTaskInternal();
             }
@@ -400,11 +449,11 @@ public class AutomataSimulator {
         setPlaying(!isPlaying());
     }
 
-    public long getFrameRate() {
+    public long getSimulationFrameRate() {
         return mSImFrameRate;
     }
 
-    public void setFrameRate(long frameRate) {
+    public void setSimulationFrameRate(long frameRate) {
         if (frameRate <= 0) {
             throw new IllegalArgumentException("Frame rate must be positive. Given: " + frameRate);
         }
@@ -413,20 +462,59 @@ public class AutomataSimulator {
             return;
         }
 
-        synchronized (mStateLock) {
+        synchronized (mSimTaskLock) {
             if (mSImFrameRate == frameRate) {
                 return;
             }
 
+            final long prev = mSImFrameRate;
             mSImFrameRate = frameRate;
-            if (mIsPlaying) {
-                enqueueSimTaskInternal();
+            if (mSimRunMode.frameRateDependent && mIsPlaying) {
+                requeueSimTaskInternal();
             }
+
+            onFrameRateChanged(prev, frameRate);
         }
     }
 
+    @NotNull
+    public RunMode getSimulationRunMode() {
+        return mSimRunMode;
+    }
+
+    public void setSimulationRunMode(@NotNull RunMode simRunMode) {
+        if (simRunMode == null) {
+            throw new NullPointerException("Simulation run mode cannot be null.");
+        }
+
+        if (mSimRunMode == simRunMode) {
+            return;
+        }
+
+        synchronized (mSimTaskLock) {
+            if (mSimRunMode == simRunMode) {
+                return;
+            }
+
+            final RunMode prev = mSimRunMode;
+            mSimRunMode = simRunMode;
+            if (mIsPlaying) {
+                requeueSimTaskInternal();
+            }
+
+            onSimulationRunModeChanged(prev, simRunMode);
+        }
+    }
 
     /* ==============================  CALLBACKS  ============================== */
+
+    protected void onFrameRateChanged(long oldFrameRate, long newFrameRate) {
+        mListeners.forEachListener(l -> l.onSimulationFrameRateChanged(this, oldFrameRate, newFrameRate));
+    }
+
+    protected void onSimulationRunModeChanged(@NotNull RunMode oldRunMode, @NotNull RunMode newRunMode) {
+        mListeners.forEachListener(l -> l.onSimulationRunModeChanged(this, oldRunMode, newRunMode));
+    }
 
     protected void onIsPlayingChanged(boolean isPlaying) {
         mListeners.forEachListener(l -> l.onIsPlayingChanged(this, isPlaying));
