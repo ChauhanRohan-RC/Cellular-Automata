@@ -20,8 +20,8 @@ public class AutomataSimulator {
     public static final boolean DEF_WRAP_ENABLED = true;
     public static final boolean DEF_PAUSE_ON_RESET_OR_CLEAR = true;
 
-    public static final long DEF_SIM_FRAME_RATE = 60;
     public static final RunMode DEF_SIM_Run_MODE = RunMode.LOOP;
+    public static final long DEF_SIM_FRAME_RATE = 60;
 
 
     public interface Listener {
@@ -125,7 +125,6 @@ public class AutomataSimulator {
 //
 //        nextGenerationSync(mSimCancellationProvider);
 //    };
-
 
     public AutomataSimulator(@NotNull AutomataI automata, int[] stateShape, boolean initRandomState) {
         if (automata.dimensions() != stateShape.length) {
@@ -356,6 +355,43 @@ public class AutomataSimulator {
     }
 
     /* ===================================  SIMULATION  ============================ */
+
+    /**
+     * @return number of threads that are always kept alive, irrespective of work load
+     * */
+    public int getCoreThreadCount() {
+        return mExecutor.getCorePoolSize();
+    }
+
+    /**
+     * @param coreThreadCount number of threads that should always be kept alive, irrespective of work load
+     * */
+    public void setCoreThreadCount(int coreThreadCount) {
+        if (coreThreadCount < 1) {
+            throw new IllegalArgumentException("Core Thread Count must be >= 1, given: " + coreThreadCount);
+        }
+
+        mExecutor.setCorePoolSize(coreThreadCount);
+    }
+
+    /**
+     * @return maximum number of threads that can be created
+     * */
+    public int getMaxThreadCount() {
+        return mExecutor.getMaximumPoolSize();
+    }
+
+    /**
+     * @param maxThreadCount max number of threads that can be created
+     * */
+    public void setMaxThreadCount(int maxThreadCount) {
+        if (maxThreadCount < 1 || maxThreadCount < mExecutor.getCorePoolSize()) {
+            throw new IllegalArgumentException("Max Thread Count must be >= 1 and > corePoolSize (currently: " + mExecutor.getCorePoolSize() + "), given: " + maxThreadCount);
+        }
+
+        mExecutor.setMaximumPoolSize(maxThreadCount);
+    }
+
 
     private void cancelSimTaskInternal() {
         final Canceller can = mSimCanceller;

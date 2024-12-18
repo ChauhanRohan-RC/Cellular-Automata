@@ -6,10 +6,12 @@ import org.jetbrains.annotations.Nullable;
 import java.awt.*;
 import java.util.concurrent.ThreadPoolExecutor;
 
-public class ConwayLifeAutomata implements AutomataI {
+public class ConwayLifeAutomata extends AbstractAutomataI {
 
     private static final int COLOR_ON = Color.BLACK.getRGB();
     private static final int COLOR_OFF = Color.WHITE.getRGB();
+
+    public static final boolean DEF_PARALLEL_COMPUTE_ALLOWED = true;
 
     @Override
     public int dimensions() {
@@ -37,18 +39,20 @@ public class ConwayLifeAutomata implements AutomataI {
     }
 
     @Override
-    public void nextState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
-        final int rows = curState.shapeAt(0);
-        final int cols = curState.shapeAt(1);
+    public boolean isParallelComputeAllowed() {
+        return DEF_PARALLEL_COMPUTE_ALLOWED;
+    }
 
+    @Override
+    protected void subCompute(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled, int row_start, int row_end) {
         final int[][] out_arr = new int[8][2];
-        int cell_state;
+        int cell_state, new_state;
         int neigh_count;
 
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
+        for (int i = row_start; i < row_end; i++) {
+            for (int j = 0; j < curState.shapeAt(1); j++) {
                 cell_state = (int) curState.get(i, j);
-                neigh_count = NdArrayF.getNeighbourIndices2D(rows, cols, i, j, wrapEnabled, out_arr);
+                neigh_count = NdArrayF.getNeighbourIndices2D(curState.shapeAt(0), curState.shapeAt(1), i, j, wrapEnabled, out_arr);
 
                 float neigh_state_sum = 0;
                 for (int k = 0; k < neigh_count; k++) {
@@ -57,12 +61,13 @@ public class ConwayLifeAutomata implements AutomataI {
 
                 if (cell_state == 0) {
                     // Dead
-                    outState.set(neigh_state_sum == 3? 1: 0, i, j);
+                    new_state = neigh_state_sum == 3? 1: 0;
                 } else {
                     // Alive
-                    outState.set(neigh_state_sum < 2 || neigh_state_sum > 3? 0: 1, i, j);
+                    new_state = neigh_state_sum < 2 || neigh_state_sum > 3? 0: 1;
                 }
 
+                outState.set(new_state, i, j);
             }
         }
     }
