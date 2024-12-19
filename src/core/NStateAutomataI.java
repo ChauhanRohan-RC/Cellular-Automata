@@ -17,7 +17,6 @@ public abstract class NStateAutomataI extends AbstractAutomataI {
         return (int) value;
     }
 
-
     /**
      * Possible Cell states (int) = [0, n] , where n >= 1<br>
      * No of states = n + 1 <br>
@@ -33,23 +32,15 @@ public abstract class NStateAutomataI extends AbstractAutomataI {
     public final int n;
 
     /**
-     * Whether the colors should have same HUE, or can have different HUE's
-     *
-     * @see #createLightThemeColorMap(boolean)
-     * */
-    private boolean monoChrome;
-
-    /**
      * Color code of each possible state, for {@code LIGHT} theme <br>
      * Colors are inverted for {@code DARK} theme using {@link U#invertColor(int)}
      * */
-    @NotNull
-    private IntIntHashMap colorMap;
+    @Nullable
+    private IntIntHashMap mColorMap;
 
-    protected NStateAutomataI(int n, boolean monoChrome) {
+    protected NStateAutomataI(int n, boolean parallelComputeEnabled, boolean monoChrome) {
+        super(parallelComputeEnabled, monoChrome);
         this.n = n;
-
-        setMonoChromeInternal(monoChrome);
     }
 
 
@@ -71,15 +62,6 @@ public abstract class NStateAutomataI extends AbstractAutomataI {
     @Override
     public final float highestCellState() {
         return n;
-    }
-
-    @NotNull
-    protected abstract IntIntHashMap createLightThemeColorMap(boolean monoChrome);
-
-    @Override
-    public final int colorRGBFor(float cellState, boolean darkMode) {
-        final int c = colorMap.get(toInt(cellState));
-        return darkMode? U.invertColor(c) : c;
     }
 
 
@@ -123,34 +105,32 @@ public abstract class NStateAutomataI extends AbstractAutomataI {
     }
 
 
+    /* COLORS */
 
-    /* COLOR MAP --------------------------- */
+    @NotNull
+    protected abstract IntIntHashMap createLightThemeColorMap(boolean monoChrome);
 
-    public final boolean isMonoChrome() {
-        return monoChrome;
+    @Override
+    public final int colorRGBForCell(float cellState, boolean darkMode) {
+        final int c = getColorMap().get(toInt(cellState));
+        return darkMode? U.invertColor(c) : c;
     }
 
-
-    protected void onMonoChromeChanged(boolean monoChrome) {
-
-    }
-
-    private void setMonoChromeInternal(boolean monoChrome) {
-        this.monoChrome = monoChrome;
-        this.colorMap = createLightThemeColorMap(monoChrome);
-    }
-
-    public final NStateAutomataI setMonoChrome(boolean monoChrome) {
-        if (this.monoChrome != monoChrome) {
-            setMonoChromeInternal(monoChrome);
-            onMonoChromeChanged(monoChrome);
+    @NotNull
+    private IntIntHashMap getColorMap() {
+        if (mColorMap == null) {
+            recreateColorMap();
         }
 
-        return this;
+        return mColorMap;
     }
 
-    public NStateAutomataI toggleMonoChrome() {
-        return setMonoChrome(!isMonoChrome());
+    private void recreateColorMap() {
+        this.mColorMap = createLightThemeColorMap(isMonochromeEnabled());
     }
 
+    @Override
+    protected void onMonoChromeChanged(boolean monoChrome) {
+        recreateColorMap();
+    }
 }

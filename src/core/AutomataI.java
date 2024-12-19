@@ -5,15 +5,13 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.concurrent.ThreadPoolExecutor;
 
-public interface AutomataI extends NextStateGeneratorI {
+public interface AutomataI extends NextStateGeneratorI, ColorProviderI {
 
     int dimensions();
 
     int cellStateCount();
 
     float cellStateAt(int stateIndex);
-
-    int colorRGBFor(float cellState, boolean darkMode);
 
     default float lowestCellState() {
         return cellStateAt(0);

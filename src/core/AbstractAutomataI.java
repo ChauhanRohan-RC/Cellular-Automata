@@ -13,9 +13,18 @@ public abstract class AbstractAutomataI implements AutomataI {
     @NotNull
     private final WorkSplitter workSplitter;
 
+    /**
+     * Whether the colors should have same HUE, or can have different HUE's
+     * */
+    private boolean monoChrome;
 
-    protected AbstractAutomataI() {
-        this.workSplitter = new WorkSplitter(DEF_PARALLEL_COMPUTE_ENABLED, DEF_PARALLEL_COMPUTE_MIN_CELLS_PER_THREAD);
+    protected AbstractAutomataI(boolean parallelComputeEnabled, boolean monoChrome) {
+        this.workSplitter = new WorkSplitter(parallelComputeEnabled, DEF_PARALLEL_COMPUTE_MIN_CELLS_PER_THREAD);
+        this.monoChrome = monoChrome;
+    }
+
+    protected AbstractAutomataI(boolean monoChrome) {
+        this(DEF_PARALLEL_COMPUTE_ENABLED, monoChrome);
     }
 
     @NotNull
@@ -43,6 +52,28 @@ public abstract class AbstractAutomataI implements AutomataI {
             workSplitter.compute(executor, rows * cols, rows, computeTask);
         } else {
             computeTask.compute(0, rows);       // Compute all now
+        }
+    }
+
+
+
+    /* COLOR MAP --------------------------- */
+
+    @Override
+    public final boolean isMonochromeEnabled() {
+        return monoChrome;
+    }
+
+
+    protected void onMonoChromeChanged(boolean monoChrome) {
+
+    }
+
+    @Override
+    public final void setMonochromeEnabled(boolean monoChrome) {
+        if (this.monoChrome != monoChrome) {
+            this.monoChrome = monoChrome;
+            onMonoChromeChanged(monoChrome);
         }
     }
 }

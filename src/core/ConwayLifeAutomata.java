@@ -13,6 +13,10 @@ public class ConwayLifeAutomata extends AbstractAutomataI {
 
     public static final boolean DEF_PARALLEL_COMPUTE_ALLOWED = true;
 
+    public ConwayLifeAutomata() {
+        super(DEF_PARALLEL_COMPUTE_ALLOWED, true);
+    }
+
     @Override
     public int dimensions() {
         return 2;
@@ -29,13 +33,18 @@ public class ConwayLifeAutomata extends AbstractAutomataI {
     }
 
     @Override
-    public int colorRGBFor(float cellState, boolean darkMode) {
+    public int colorRGBForCell(float cellState, boolean darkMode) {
         final boolean on = cellState - 0.5 > 0;
         if (darkMode) {
             return on? COLOR_OFF : COLOR_ON;
         }
 
         return on? COLOR_ON : COLOR_OFF;
+    }
+
+    @Override
+    protected void onMonoChromeChanged(boolean monoChrome) {
+        super.onMonoChromeChanged(monoChrome);
     }
 
     @Override

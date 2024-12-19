@@ -294,7 +294,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             for (int i = draw_start_row; i < draw_start_row + draw_rows; i++) {
                 for (int j = draw_start_col; j < draw_start_col + draw_cols; j++) {
                     cell_state = state.get(i, j);
-                    cell_color = automata.colorRGBFor(cell_state, theme.isDark);
+                    cell_color = automata.colorRGBForCell(cell_state, theme.isDark);
 
                     cell_drawer.cellDrawTask.drawCell(graphics,
                             (j * mCellSizePix) - mPanX,
@@ -429,10 +429,9 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                 AutomataSimulator sim = mSimulator;
                 if (sim != null) {
                     sim.togglePlaying();
+                    Log.d(TAG, "PLAYING: " + sim.isPlaying());
                 }
 
-//                playing = !playing;
-//                Log.d(TAG, "Playing: " + playing);
                 invalidateFrame();
             }
 
@@ -442,10 +441,8 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                 } else {
                     AutomataSimulator sim = mSimulator;
                     if (sim != null) {
-//                        Log.d(TAG, "RESET_STATE");
-//                        playing = false;
-//                        Log.d(TAG, "Playing: " + playing);
                         sim.resetStateAsync();
+                        Log.d(TAG, "RESET_STATE");
                     }
                 }
             }
@@ -453,16 +450,16 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
             case java.awt.event.KeyEvent.VK_C -> {
                 AutomataSimulator sim = mSimulator;
                 if (sim != null) {
-//                    Log.d(TAG, "CLEAR_STATE");
-//                    playing = false;
-//                    Log.d(TAG, "Playing: " + playing);
                     sim.clearStateAsync();
+                    Log.d(TAG, "CLEAR_STATE");
                 }
             }
 
             case java.awt.event.KeyEvent.VK_T -> {
                 // Switch theme
                 mTheme = U.cycleEnum(Theme.class, mTheme);
+                Log.d(TAG, "THEME: " + mTheme);
+
                 invalidateFrame();
             }
 
@@ -476,6 +473,23 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                 cellDrawer = U.cycleEnum(CellDrawer.class, cellDrawer);
                 Log.d(TAG, "CELL_SHAPE: " + cellDrawer);
                 invalidateFrame();
+            }
+
+            case java.awt.event.KeyEvent.VK_P -> {
+                AutomataSimulator sim = mSimulator;
+                if (sim != null) {
+                    sim.toggleWrapEnabled();
+                    Log.d(TAG, "WRAP_ENABLED: " + sim.isWrapEnabled());
+                }
+            }
+
+            case java.awt.event.KeyEvent.VK_M -> {
+                AutomataSimulator sim = mSimulator;
+                if (sim != null) {
+                    sim.getAutomata().toggleMonochromeEnabled();
+                    Log.d(TAG, "MONOCHROME: " + sim.getAutomata().isMonochromeEnabled());
+                    invalidateFrame();
+                }
             }
         }
     }
@@ -703,8 +717,8 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         Log.setDebug(true);
 
         final int[] state_shape = {300, 460};
-//        final AutomataI automata = new ZhabotinskyAutomata().setMonoChrome(true);
-        final AutomataI automata = new ConwayLifeAutomata();
+        final AutomataI automata = new ZhabotinskyAutomata();
+//        final AutomataI automata = new ConwayLifeAutomata();
 //        final AutomataI automata = new NLifeAutomata();
 
         final AutomataSimulator simulator = new AutomataSimulator(automata, state_shape, true);
