@@ -1,13 +1,20 @@
 package core;
 
 import com.jogamp.common.util.IntIntHashMap;
+import core.definition.NdArrayF;
+import core.definition.automata.ColorProviderI;
+import core.definition.automata.NStateAutomataI;
 import org.jetbrains.annotations.NotNull;
 import util.U;
+
+import java.util.Objects;
 
 /**
  * An automata modelling the Belousov-Zhabotinsky Reaction
  */
 public class ZhabotinskyAutomata extends NStateAutomataI {
+
+    public static final String DISPLAY_NAME = "Brian's Brain";
 
     public static final int DEF_N = 99;
     public static final float DEF_K1 = 2;
@@ -15,7 +22,6 @@ public class ZhabotinskyAutomata extends NStateAutomataI {
     public static final int DEF_G = 35;
 
     private static final boolean DEF_MONOCHROME = true;
-
     public static final boolean DEF_PARALLEL_COMPUTE_ALLOWED = true;
 
 
@@ -42,7 +48,7 @@ public class ZhabotinskyAutomata extends NStateAutomataI {
     private final int g;
 
     public ZhabotinskyAutomata(int n, float k1, float k2, int g, boolean monoChrome) {
-        super(n, DEF_PARALLEL_COMPUTE_ALLOWED, monoChrome);
+        super(n, monoChrome);
         this.k1 = k1;
         this.k2 = k2;
         this.g = g;
@@ -56,6 +62,10 @@ public class ZhabotinskyAutomata extends NStateAutomataI {
         this(DEF_N);
     }
 
+    @Override
+    public @NotNull String displayName() {
+        return DISPLAY_NAME;
+    }
 
     @Override
     public int dimensions() {
@@ -79,10 +89,10 @@ public class ZhabotinskyAutomata extends NStateAutomataI {
     }
 
     @Override
-    protected void subCompute(@NotNull NdArrayF curState,
-                        @NotNull NdArrayF outState,
-                        boolean wrapEnabled,
-                        int row_start, int row_end) {
+    public void subComputeNextState(@NotNull NdArrayF curState,
+                                       @NotNull NdArrayF outState,
+                                       boolean wrapEnabled,
+                                       int row_start, int row_end) {
         final int[][] neigh_arr = new int[8][2];
         int neigh_count;
         int cell_state, new_state;
@@ -128,4 +138,16 @@ public class ZhabotinskyAutomata extends NStateAutomataI {
         }
     }
 
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        ZhabotinskyAutomata that = (ZhabotinskyAutomata) o;
+        return n == that.n && g == that.g && Float.compare(k1, that.k1) == 0 && Float.compare(k2, that.k2) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(n, k1, k2, g);
+    }
 }

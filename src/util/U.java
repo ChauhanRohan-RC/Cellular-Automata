@@ -185,6 +185,9 @@ public class U {
         return gray255(gray, 255);
     }
 
+    public static int argb255(int a, int r, int g, int b) {
+        return ((a & 0xFF) << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
+    }
 
     /**
      * @param color the color in argb or ahsl format

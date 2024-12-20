@@ -1,4 +1,7 @@
 import core.*;
+import core.definition.NdArrayFloatI;
+import core.definition.automata.AutomataI;
+import core.simulator.AutomataSimulator;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import processing.core.PApplet;
@@ -90,7 +93,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
     public interface CellDrawTask {
 
-        void initCellDrawStyle(@NotNull PGraphics g, float strokeWeight, float strokeColor);
+        void initCellDrawStyle(@NotNull PGraphics g, float strokeWeight, int strokeColor);
 
         void drawCell(@NotNull PGraphics g, float x, float y, float cellSize, float cellState, int cellColor);
 
@@ -99,7 +102,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     public enum CellDrawer {
         SQUARE(new CellDrawTask() {
             @Override
-            public void initCellDrawStyle(@NotNull PGraphics g, float strokeWeight, float strokeColor) {
+            public void initCellDrawStyle(@NotNull PGraphics g, float strokeWeight, int strokeColor) {
                 if (strokeWeight == 0) {
                     g.noStroke();
                 } else {
@@ -118,7 +121,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
         CIRCLE(new CellDrawTask() {
             @Override
-            public void initCellDrawStyle(@NotNull PGraphics g, float strokeWeight, float strokeColor) {
+            public void initCellDrawStyle(@NotNull PGraphics g, float strokeWeight, int strokeColor) {
                 // Don't draw stroke
                 g.noStroke();
             }
@@ -214,7 +217,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
     public void postDraw() {
 
-//        final AutomataSimulator sim = mSimulator;
+//        final core.simulator.AutomataSimulator sim = mSimulator;
 //        if (playing && sim != null && frameCount % 2 == 0) {
 //            Log.d(TAG, "Creating GEN: " + (sim.getGeneration() + 1));
 //            sim.nextGenerationSync(null);
@@ -429,7 +432,6 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                 AutomataSimulator sim = mSimulator;
                 if (sim != null) {
                     sim.togglePlaying();
-                    Log.d(TAG, "PLAYING: " + sim.isPlaying());
                 }
 
                 invalidateFrame();
@@ -475,11 +477,15 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                 invalidateFrame();
             }
 
+            // Periodic Boundary Condition
             case java.awt.event.KeyEvent.VK_P -> {
                 AutomataSimulator sim = mSimulator;
                 if (sim != null) {
-                    sim.toggleWrapEnabled();
-                    Log.d(TAG, "WRAP_ENABLED: " + sim.isWrapEnabled());
+                    if (event.isControlDown()) {
+                        sim.getWorkSplitter().toggleParallelComputeEnabled();
+                    } else {
+                        sim.toggleWrapEnabled();
+                    }
                 }
             }
 
@@ -664,6 +670,10 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         });
     }
 
+    @Override
+    public void onAutomataChanged(@NotNull AutomataSimulator simulator, @NotNull AutomataI oldAutomata, @NotNull AutomataI newAutomata) {
+        Log.d(TAG, "AUTOMATA CHANGED: " + oldAutomata + " -> " + newAutomata);
+    }
 
     @Override
     public void onSimulationFrameRateChanged(@NotNull AutomataSimulator simulator, long oldFrameRate, long newFrameRate) {
@@ -688,7 +698,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
     @Override
     public void onWrapEnabledChanged(@NotNull AutomataSimulator simulator, boolean wrapEnabled) {
-        Log.d(TAG, "WRAP_ENABLED: " + wrapEnabled);
+        Log.d(TAG, "PERIODIC_BC: " + wrapEnabled);
     }
 
     @Override
@@ -709,16 +719,26 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         postInvalidateFrame();
     }
 
+    @Override
+    public void onSimulatorThreadCountChanged(@NotNull AutomataSimulator simulator) {
+        Log.d(TAG, "THREAD_COUNT: %d (core), %d (max), %d (workers)".formatted(simulator.getCoreThreadCount(), simulator.getMaxThreadCount(), simulator.getWorkerThreadCount()));
+    }
+
+    @Override
+    public void onParallelComputeEnabledChanged(@NotNull AutomataSimulator simulator, boolean parallelComputeEnabled) {
+        Log.d(TAG, "PARALLEL_COMPUTE_READY: %b [Threads: %d (core), %d (max), %d (workers)]".formatted(simulator.isParallelComputeReady(), simulator.getCoreThreadCount(), simulator.getMaxThreadCount(), simulator.getWorkerThreadCount()));
+    }
 
     // ------------------------------------------------
 
     public static void main(String[] args) {
         Log.init();
-        Log.setDebug(true);
+        Log.setDebug(false);
 
         final int[] state_shape = {300, 460};
-        final AutomataI automata = new ZhabotinskyAutomata();
-//        final AutomataI automata = new ConwayLifeAutomata();
+//        final AutomataI automata = new ZhabotinskyAutomata();
+//        final AutomataI automata = new LifeAutomata(LifeAutomata.Rule.FLAKES);
+        final AutomataI automata = new BrianBrainAutomata();
 //        final AutomataI automata = new NLifeAutomata();
 
         final AutomataSimulator simulator = new AutomataSimulator(automata, state_shape, true);

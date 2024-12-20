@@ -1,11 +1,15 @@
-package core;
+package core.definition.automata;
 
+import core.definition.NdArrayF;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.concurrent.ThreadPoolExecutor;
 
-public interface AutomataI extends NextStateGeneratorI, ColorProviderI {
+public interface AutomataI extends ColorProviderI {
+
+    @NotNull
+    String displayName();
 
     int dimensions();
 
@@ -45,4 +49,16 @@ public interface AutomataI extends NextStateGeneratorI, ColorProviderI {
     }
 
     boolean stepCellState(@NotNull NdArrayF state, int[] cellIndices, boolean stepUp);
+
+
+
+    /**
+     * Whether Parallel compute is allowed by the underlying Automata implementation
+     * */
+    boolean isParallelComputeAllowed();
+
+    void subComputeNextState(@NotNull NdArrayF curState,
+                             @NotNull NdArrayF outState,
+                             boolean wrapEnabled,
+                             int row_start, int row_end);
 }

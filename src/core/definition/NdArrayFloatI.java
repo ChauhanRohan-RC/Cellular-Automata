@@ -1,4 +1,4 @@
-package core;
+package core.definition;
 
 /**
  * Immutable interface of an N-Dimensional float array

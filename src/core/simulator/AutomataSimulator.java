@@ -1,7 +1,10 @@
-import core.AutomataI;
-import core.NdArrayF;
-import core.NdArrayFloatI;
-import core.NextStateGeneratorI;
+package core.simulator;
+
+import core.definition.NdArrayF;
+import core.definition.NdArrayFloatI;
+import core.definition.automata.AutomataI;
+import core.definition.automata.NextStateGeneratorI;
+import core.definition.automata.WorkSplitter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import util.async.BiConsumer;
@@ -9,22 +12,28 @@ import util.async.CancellationProvider;
 import util.async.Canceller;
 import util.live.Listeners;
 
+import java.util.Arrays;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 
-public class AutomataSimulator {
+public class AutomataSimulator implements WorkSplitter.Listener {
+
+    public static final RunMode DEF_SIM_Run_MODE = RunMode.LOOP;
+    public static final long DEF_SIM_FRAME_RATE = 60;
+    public static final boolean DEF_PARALLEL_COMPUTE_ENABLED = true;
+    public static final int DEF_PARALLEL_COMPUTE_MIN_CELLS_PER_THREAD = 10000;
 
     public static final int DEF_GEN_STEPS = 1;
     public static final boolean DEF_WRAP_ENABLED = true;
     public static final boolean DEF_PAUSE_ON_RESET_OR_CLEAR = true;
 
-    public static final RunMode DEF_SIM_Run_MODE = RunMode.LOOP;
-    public static final long DEF_SIM_FRAME_RATE = 60;
-
 
     public interface Listener {
+
+        void onAutomataChanged(@NotNull AutomataSimulator simulator, @NotNull AutomataI oldAutomata, @NotNull AutomataI newAutomata);
 
         void onSimulationFrameRateChanged(@NotNull AutomataSimulator simulator, long oldFrameRate, long newFrameRate);
 
@@ -42,6 +51,9 @@ public class AutomataSimulator {
 
         void onAutomataCellStateChanged(AutomataSimulator simulator, @NotNull NdArrayFloatI state, int[] cellIndices);
 
+        void onSimulatorThreadCountChanged(@NotNull AutomataSimulator simulator);
+
+        void onParallelComputeEnabledChanged(@NotNull AutomataSimulator simulator, boolean parallelComputeEnabled);
     }
 
     public enum RunMode {
@@ -67,10 +79,10 @@ public class AutomataSimulator {
 
 
     @NotNull
-    private AutomataI automata;
+    private AutomataI mAutomata;
 
     @NotNull
-    private NdArrayF state;
+    private NdArrayF mState;
     @Nullable
     private NdArrayF mTempOutState;
 
@@ -104,27 +116,9 @@ public class AutomataSimulator {
     private RunMode mSimRunMode = DEF_SIM_Run_MODE;
     private long mSImFrameRate = DEF_SIM_FRAME_RATE;
 
-//    @NotNull
-//    private final CancellationProvider mSimCancellationProvider = new CancellationProvider() {
-//        @Override
-//        public boolean isCancelled() {
-//            return !mIsPlaying || mSimFuture == null || mSimFuture.isCancelled();
-//        }
-//    };
+    @NotNull
+    private final WorkSplitter mWorkSplitter;
 
-//
-//    @NotNull
-//    private final Runnable mSimTask = () -> {
-//        // DEBUG
-//        final long now = System.currentTimeMillis();
-//        if (mLastFrameMs > 0) {
-//            System.out.println("Frame Time: " + (now - mLastFrameMs) + " ms");
-//        }
-//
-//        mLastFrameMs = now;
-//
-//        nextGenerationSync(mSimCancellationProvider);
-//    };
 
     public AutomataSimulator(@NotNull AutomataI automata, int[] stateShape, boolean initRandomState) {
         if (automata.dimensions() != stateShape.length) {
@@ -132,8 +126,8 @@ public class AutomataSimulator {
         }
 
         // State and Automata
-        this.state = new NdArrayF(stateShape);
-        this.automata = automata;
+        mState = new NdArrayF(stateShape);
+        mAutomata = automata;
 
         // Executor
         final int cpu_count = Runtime.getRuntime().availableProcessors();
@@ -142,6 +136,10 @@ public class AutomataSimulator {
         mExecutor.setRemoveOnCancelPolicy(true);
         mExecutor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
         mExecutor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+
+        // Work Splitter
+        mWorkSplitter = new WorkSplitter(DEF_PARALLEL_COMPUTE_ENABLED, DEF_PARALLEL_COMPUTE_MIN_CELLS_PER_THREAD);
+        mWorkSplitter.setListener(this);
 
         // Init
         if (initRandomState) {
@@ -157,16 +155,13 @@ public class AutomataSimulator {
     }
 
     public @NotNull NdArrayFloatI getState() {
-        return state;
+        return mState;
     }
 
     public float getCellState(int... cellIndices) {
-        return state.get(cellIndices);
+        return mState.get(cellIndices);
     }
 
-    public @NotNull AutomataI getAutomata() {
-        return automata;
-    }
 
     public int getGenerationSteps() {
         return generationSteps;
@@ -203,16 +198,15 @@ public class AutomataSimulator {
         this.pauseOnResetOrClear = pauseOnResetOrClear;
     }
 
-
     /* ============================  CELL STATE METHODS  =========================== */
 
     public boolean cycleCellState(int[] cellIndices) {
         final boolean changed;
 
         synchronized (mStateLock) {
-            changed = automata.cycleCellState(state, cellIndices);
+            changed = mAutomata.cycleCellState(mState, cellIndices);
             if (changed) {
-                onCellStateChanged(state, cellIndices);
+                onCellStateChanged(mState, cellIndices);
             }
         }
 
@@ -223,9 +217,9 @@ public class AutomataSimulator {
         final boolean changed;
 
         synchronized (mStateLock) {
-            changed = automata.setCellState(state, cellIndices, value);
+            changed = mAutomata.setCellState(mState, cellIndices, value);
             if (changed) {
-                onCellStateChanged(state, cellIndices);
+                onCellStateChanged(mState, cellIndices);
             }
         }
 
@@ -236,9 +230,9 @@ public class AutomataSimulator {
         final boolean changed;
 
         synchronized (mStateLock) {
-            changed = automata.stepCellState(state, cellIndices, stepUp);
+            changed = mAutomata.stepCellState(mState, cellIndices, stepUp);
             if (changed) {
-                onCellStateChanged(state, cellIndices);
+                onCellStateChanged(mState, cellIndices);
             }
         }
 
@@ -246,13 +240,13 @@ public class AutomataSimulator {
     }
 
     public boolean setCellStateLowest(int[] cellIndices) {
-        return setCellState(cellIndices, automata.lowestCellState());
+        return setCellState(cellIndices, mAutomata.lowestCellState());
     }
 
     public boolean setCellStateHighest(int[] cellIndices) {
-        return setCellState(cellIndices, automata.highestCellState());
+        return setCellState(cellIndices, mAutomata.highestCellState());
     }
-
+    
 
     /* ============================  STATE METHODS  =========================== */
 
@@ -260,12 +254,12 @@ public class AutomataSimulator {
     private NdArrayF ensureOutTempState() {
         NdArrayF outState = mTempOutState;
 
-        if (outState == null || !outState.isSameShape(state)) {
+        if (outState == null || !outState.isSameShape(mState)) {
             synchronized (mStateLock) {
                 outState = mTempOutState;
 
-                if (outState == null || !outState.isSameShape(state)) {
-                    outState = new NdArrayF(state.shape());
+                if (outState == null || !outState.isSameShape(mState)) {
+                    outState = new NdArrayF(mState.shape());
                     mTempOutState = outState;
                 }
             }
@@ -276,13 +270,13 @@ public class AutomataSimulator {
 
     private void generateNextStateSyncInternal(@NotNull NextStateGeneratorI generator, @Nullable BiConsumer<NdArrayF, NdArrayF> callback) {
         synchronized (mStateLock) {
-            final NdArrayF oldState = state;
+            final NdArrayF oldState = mState;
             final NdArrayF newState = ensureOutTempState();
 
-            generator.nextState(mExecutor, oldState, newState, wrapEnabled);
+            generator.computeNextState(mExecutor, oldState, newState, wrapEnabled);
 
             // Switch current and temp states
-            this.state = newState;
+            mState = newState;
             mTempOutState = oldState;
 
             if (callback != null) {
@@ -296,7 +290,7 @@ public class AutomataSimulator {
             setPlaying(false);
         }
 
-        generateNextStateSyncInternal((executor, curState, outState, wrapEnabled1) -> automata.resetState(executor, curState, outState, wrapEnabled1), (old_state, new_state) -> {
+        generateNextStateSyncInternal((executor, curState, outState, wrapEnabled1) -> mAutomata.resetState(executor, curState, outState, wrapEnabled1), (old_state, new_state) -> {
             final int newGen = 0;
             generation = newGen;
             onStateChanged(old_state, new_state, newGen, 0);
@@ -313,7 +307,7 @@ public class AutomataSimulator {
             setPlaying(false);
         }
 
-        generateNextStateSyncInternal((executor, curState, outState, wrapEnabled1) -> automata.clearState(executor, curState, outState, wrapEnabled1), (old_state, new_state) -> {
+        generateNextStateSyncInternal((executor, curState, outState, wrapEnabled1) -> mAutomata.clearState(executor, curState, outState, wrapEnabled1), (old_state, new_state) -> {
             final int newGen = 0;
             generation = newGen;
             onStateChanged(old_state, new_state, newGen, 0);
@@ -325,16 +319,30 @@ public class AutomataSimulator {
         mExecutor.execute(this::clearStateSync);
     }
 
+
+    private final NextStateGeneratorI mAutomataNextStateGenerator = new NextStateGeneratorI() {
+        @Override
+        public void computeNextState(@Nullable ThreadPoolExecutor executor, @NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled) {
+            final int rows = curState.shapeAt(0);
+
+            final WorkSplitter.ComputeTask computeTask = (row_start, row_end) -> mAutomata.subComputeNextState(curState, outState, wrapEnabled, row_start, row_end);
+            if (mAutomata.isParallelComputeAllowed()) {
+                mWorkSplitter.compute(executor, curState.size(), rows, computeTask);
+            } else {
+                computeTask.compute(0, rows);       // Compute all now
+            }
+        }
+    };
+
     public void nextGenerationSync(@Nullable CancellationProvider c) {
         synchronized (mStateLock) {
-
             if (c != null && c.isCancelled()) {
                 return;
             }
 
             final int gen = generation;
             final int steps = generationSteps;
-            final NdArrayF curGenState = state;
+            final NdArrayF curGenState = mState;
 
             int step = 0;
             while (step < steps) {
@@ -343,19 +351,61 @@ public class AutomataSimulator {
                 }
 
                 final int finalStep = step;
-                generateNextStateSyncInternal(automata, (old_state, new_state) -> onStateChanged(old_state, new_state, gen, finalStep));
+                generateNextStateSyncInternal(mAutomataNextStateGenerator, (old_state, new_state) -> onStateChanged(old_state, new_state, gen, finalStep));
                 step++;
             }
 
             if (step > 0) {
                 generation = gen + 1;
-                onGenerationChanged(curGenState, this.state, gen, steps);
+                onGenerationChanged(curGenState, mState, gen, steps);
             }
         }
     }
 
-    /* ===================================  SIMULATION  ============================ */
+    public @NotNull AutomataI getAutomata() {
+        return mAutomata;
+    }
 
+    public void setAutomata(@NotNull AutomataI automata, int[] stateShape, boolean initRandomState) {
+        if (automata == null) {
+            throw new NullPointerException("Automata must not be null!");
+        }
+
+        if (automata.dimensions() != stateShape.length) {
+            throw new IllegalArgumentException("Automata and State must have same number of dimensions!!");
+        }
+        
+        if (mAutomata.equals(automata) && Arrays.equals(mState.shape(), stateShape)) {
+            return;
+        }
+        
+        synchronized (mStateLock) {
+            if (mAutomata.equals(automata) && Arrays.equals(mState.shape(), stateShape)) {
+                return;
+            }
+
+//            if (this.automata.equals(automata)) {
+//                // JUST CHANGE STATE_SHAPE
+//                return;
+//            }
+
+            setPlaying(false);
+            
+            final AutomataI oldAutomata = mAutomata;
+            mAutomata = automata;
+            mState = new NdArrayF(stateShape);
+            mTempOutState = null;
+
+            if (initRandomState) {
+                resetStateAsync();
+            }
+
+            onAutomataChanged(oldAutomata, automata);
+        }
+    }
+
+    /* ===================================  SIMULATION  ============================ */
+    
     /**
      * @return number of threads that are always kept alive, irrespective of work load
      * */
@@ -367,11 +417,14 @@ public class AutomataSimulator {
      * @param coreThreadCount number of threads that should always be kept alive, irrespective of work load
      * */
     public void setCoreThreadCount(int coreThreadCount) {
-        if (coreThreadCount < 1) {
-            throw new IllegalArgumentException("Core Thread Count must be >= 1, given: " + coreThreadCount);
+        if (coreThreadCount < 1 || mExecutor.getMaximumPoolSize() < coreThreadCount) {
+            throw new IllegalArgumentException("Core Thread Count must be >= 1 and <= maxThreadCount, given: " + coreThreadCount);
         }
 
-        mExecutor.setCorePoolSize(coreThreadCount);
+        if (mExecutor.getCorePoolSize() != coreThreadCount) {
+            mExecutor.setCorePoolSize(coreThreadCount);
+            onExecutorThreadCountChanged();
+        }
     }
 
     /**
@@ -389,7 +442,23 @@ public class AutomataSimulator {
             throw new IllegalArgumentException("Max Thread Count must be >= 1 and > corePoolSize (currently: " + mExecutor.getCorePoolSize() + "), given: " + maxThreadCount);
         }
 
-        mExecutor.setMaximumPoolSize(maxThreadCount);
+        if (mExecutor.getMaximumPoolSize() != maxThreadCount) {
+            mExecutor.setMaximumPoolSize(maxThreadCount);
+            onExecutorThreadCountChanged();
+        }
+    }
+
+    @NotNull
+    public WorkSplitter getWorkSplitter() {
+        return mWorkSplitter;
+    }
+
+    public boolean isParallelComputeReady() {
+        return mAutomata.isParallelComputeAllowed() && mWorkSplitter.isParallelComputeEnabled() && mWorkSplitter.isExecutorParallelReady(mExecutor);
+    }
+
+    public int getWorkerThreadCount() {
+        return mWorkSplitter.getWorkerThreadCount(mExecutor, mState.size(), mState.shapeAt(0));
     }
 
 
@@ -412,7 +481,7 @@ public class AutomataSimulator {
         return mIsPlaying;
     }
 
-    private long mLastFrameMs = -1;
+//    private long mLastFrameMs = -1;
 
     private void requeueSimTaskInternal() {
         cancelSimTaskInternal();
@@ -452,9 +521,7 @@ public class AutomataSimulator {
                 mSimFuture = mExecutor.submit(looper);
             }
 
-            default -> {
-                throw new AssertionError("Unexpected sim run mode: " + mSimRunMode);
-            }
+            default -> throw new AssertionError("Unexpected sim run mode: " + mSimRunMode);
         }
 
 
@@ -544,6 +611,10 @@ public class AutomataSimulator {
 
     /* ==============================  CALLBACKS  ============================== */
 
+    protected void onAutomataChanged(@NotNull AutomataI oldAutomata, @NotNull AutomataI newAutomata) {
+        mListeners.forEachListener(l -> l.onAutomataChanged(this, oldAutomata, newAutomata));
+    }
+
     protected void onFrameRateChanged(long oldFrameRate, long newFrameRate) {
         mListeners.forEachListener(l -> l.onSimulationFrameRateChanged(this, oldFrameRate, newFrameRate));
     }
@@ -575,6 +646,21 @@ public class AutomataSimulator {
     protected void onWrapEnabledChanged(boolean wrapEnabled) {
         mListeners.forEachListener(l -> l.onWrapEnabledChanged(this, wrapEnabled));
     }
+
+    protected void onExecutorThreadCountChanged() {
+        mListeners.forEachListener(l -> l.onSimulatorThreadCountChanged(this));
+    }
+
+    @Override
+    public void onParallelComputeEnabledChanged(boolean parallelComputeEnabled) {
+        mListeners.forEachListener(l -> l.onParallelComputeEnabledChanged(this, parallelComputeEnabled));
+    }
+
+    @Override
+    public void onMinCellsPerThreadChanged(int oldMinCellsPerThread, int newMinCellsPerThread) {
+
+    }
+
 
     public void addListener(@NotNull Listener listener) {
         mListeners.addListener(listener);

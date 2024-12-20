@@ -1,4 +1,4 @@
-package core;
+package core.definition.automata;
 
 import com.jogamp.common.util.IntIntHashMap;
 import org.jetbrains.annotations.NotNull;
@@ -14,7 +14,7 @@ public interface ColorProviderI {
 
         if (useHueForFirstLast) {
             for (int i = 0; i <= n; i++) {
-                cmap.put(i, Color.getHSBColor(U.map(i, 0, n, hueStart, hueEnd), 1, 1).getRGB());
+                cmap.put(i, Color.HSBtoRGB(U.map(i, 0, n, hueStart, hueEnd), 1, 1));
             }
         } else {
             cmap.put(0, U.gray255(255));
@@ -22,7 +22,7 @@ public interface ColorProviderI {
 
             // INFECTED: interpolating hue
             for (int i = 1; i < n; i++) {
-                cmap.put(i, Color.getHSBColor(U.map(i, 1, n - 1, hueStart, hueEnd), saturation, brightness).getRGB());
+                cmap.put(i, Color.HSBtoRGB(U.map(i, 1, n - 1, hueStart, hueEnd), saturation, brightness));
             }
         }
 
@@ -46,8 +46,8 @@ public interface ColorProviderI {
             float y_n = (coeff * i) + v1StartOrder;
             float y = (float) Math.pow(y_n, order_recip);
 
-            final Color c = v1Saturation? Color.getHSBColor(hue, y, v2): Color.getHSBColor(hue, v2, y);
-            cmap.put(i, c.getRGB());
+            final int c = v1Saturation? Color.HSBtoRGB(hue, y, v2): Color.HSBtoRGB(hue, v2, y);
+            cmap.put(i, c);
         }
 
         return cmap;

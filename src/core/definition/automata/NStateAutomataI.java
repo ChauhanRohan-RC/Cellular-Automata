@@ -1,6 +1,7 @@
-package core;
+package core.definition.automata;
 
 import com.jogamp.common.util.IntIntHashMap;
+import core.definition.NdArrayF;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import util.U;
@@ -38,8 +39,8 @@ public abstract class NStateAutomataI extends AbstractAutomataI {
     @Nullable
     private IntIntHashMap mColorMap;
 
-    protected NStateAutomataI(int n, boolean parallelComputeEnabled, boolean monoChrome) {
-        super(parallelComputeEnabled, monoChrome);
+    protected NStateAutomataI(int n, boolean monoChrome) {
+        super(monoChrome);
         this.n = n;
     }
 

@@ -1,0 +1,5 @@
+Control these from UI...
+1. simRunMode      -> simulator.setSimulationRunMode()
+2. simFrameRate    -> simulator.setSimulationFrameRate()
+3. change Automata -> simulator.setAutomata()
+5. simulator threads -> simulator.setCoreThreadCount() and simulator.setMaxThreadCount()

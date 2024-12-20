@@ -1,8 +1,13 @@
 package core;
 
 import com.jogamp.common.util.IntIntHashMap;
+import core.definition.NdArrayF;
+import core.definition.automata.ColorProviderI;
+import core.definition.automata.NStateAutomataI;
 import org.jetbrains.annotations.NotNull;
 import util.U;
+
+import java.util.Objects;
 
 /**
  * N-state Generalization of Conway's game of life
@@ -10,6 +15,8 @@ import util.U;
  * Taking {@code n = 1, k1 = 2, k2 = k3 = k4 = 3} gives the Conway's game of Life
  * */
 public class NLifeAutomata extends NStateAutomataI {
+
+    public static final String DISPLAY_NAME = "N-Life";
 
     public static final int DEF_N = 4;
 
@@ -20,7 +27,6 @@ public class NLifeAutomata extends NStateAutomataI {
     public static final int DEF_K4 = 9;
 
     public static final boolean DEF_MONOCHROME = false;
-
     public static final boolean DEF_PARALLEL_COMPUTE_ALLOWED = true;
 
 
@@ -38,7 +44,7 @@ public class NLifeAutomata extends NStateAutomataI {
     private final float mHalfN;
 
     public NLifeAutomata(int n, int k1, int k2, int k3, int k4, boolean monoChrome) {
-        super(n, DEF_PARALLEL_COMPUTE_ALLOWED, monoChrome);
+        super(n, monoChrome);
         this.k1 = k1;
         this.k2 = k2;
         this.k3 = k3;
@@ -55,6 +61,10 @@ public class NLifeAutomata extends NStateAutomataI {
         this(DEF_N);
     }
 
+    @Override
+    public @NotNull String displayName() {
+        return DISPLAY_NAME;
+    }
 
     @Override
     public int dimensions() {
@@ -77,7 +87,7 @@ public class NLifeAutomata extends NStateAutomataI {
     }
 
     @Override
-    protected void subCompute(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled, int row_start, int row_end) {
+    public void subComputeNextState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled, int row_start, int row_end) {
         final int[][] neigh_arr = new int[8][2];
         int neigh_count;
         int cell_state, new_state;
@@ -110,5 +120,17 @@ public class NLifeAutomata extends NStateAutomataI {
                 outState.set(new_state, i, j);
             }
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        NLifeAutomata that = (NLifeAutomata) o;
+        return n == that.n && k1 == that.k1 && k2 == that.k2 && k3 == that.k3 && k4 == that.k4;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(n, k1, k2, k3, k4);
     }
 }
