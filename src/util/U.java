@@ -11,7 +11,7 @@ import java.util.Random;
 public class U {
 
     public static final float HALF_PI = (float) (Math.PI / 2);
-    public static final Random RANDOM = new Random();
+//    public static final Random RANDOM = new Random();
 
     /**
      * Native screen resolution, ex. 1920x1080
@@ -239,11 +239,14 @@ public class U {
     }
 
 
+
+    public static int signum(int i) {
+        return Integer.compare(i, 0);
+    }
+
     public static float sq(float n) {
         return n * n;
     }
-
-
 
     public static float lerp(float start, float stop, float amt) {
         return start + (stop - start) * amt;

@@ -27,45 +27,52 @@ public class LifeAutomata extends AbstractAutomataI {
 
     @FunctionalInterface
     public interface NewCellStateProvider {
-        int getNewState(int state, int neighbourCount, int aliveNeighbourCount);
+        boolean getNewState(boolean state, int neighbourCount, int aliveNeighbourCount);
     }
 
     public enum Rule {
 
-        // B2/S23
+        // B3/S23
         CONWAY_LIFE("Conway Life",
                 (state, neighbourCount, aliveNeighbourCount) -> {
-                    if (state == 0) return aliveNeighbourCount == 3 ? 1 : 0;      // born: 2
-                    return aliveNeighbourCount == 2 || aliveNeighbourCount == 3 ? 1 : 0;    // survive: 2,3
+                    return aliveNeighbourCount == 3 || (state && aliveNeighbourCount == 2);
                 }
         ),
 
         // B34/s34
         LIFE_34("Life-34",
                 (state, neighbourCount, aliveNeighbourCount) -> {
-                    return aliveNeighbourCount == 3 || aliveNeighbourCount == 4 ? 1 : 0;
+                    return aliveNeighbourCount == 3 || aliveNeighbourCount == 4;
+                }
+        ),
+
+        // B36/S23
+        HIGH_LIFE("Life-High",
+                (state, neighbourCount, aliveNeighbourCount) -> {
+                    if (state)
+                        return aliveNeighbourCount == 2 || aliveNeighbourCount == 3;
+                    return aliveNeighbourCount == 3 || aliveNeighbourCount == 6;
                 }
         ),
 
         // B2/S
         SEEDS("Life-Seeds",
                 (state, neighbourCount, aliveNeighbourCount) -> {
-                    if (state == 0) return aliveNeighbourCount == 2 ? 1 : 0;      // born: 2
-                    return 0;    // survive: NEVER
+                    return !state && aliveNeighbourCount == 2;      // born: 2, survive: NEVER
                 }
         ),
 
         // B1357/S1357
         REPLICATOR("Life-Replicator",
                 (state, neighbourCount, aliveNeighbourCount) -> {
-                    return aliveNeighbourCount % 2 == 1 ? 1 : 0;
+                    return aliveNeighbourCount % 2 == 1;
                 }
         ),
 
         // B3/S012345678
         FLAKES("Life-Flakes",
                 (state, neighbourCount, aliveNeighbourCount) -> {
-                    return state == 1 || aliveNeighbourCount == 3 ? 1 : 0;
+                    return state || aliveNeighbourCount == 3;
                 },
                 0xFFFFFFFF, 0xFF25A7DF,
                 0xFF000000, 0xFF22DFFF
@@ -74,12 +81,44 @@ public class LifeAutomata extends AbstractAutomataI {
         // B35678/S5678
         DIAMOEBA("Life-Diamoeba",
                 (state, neighbourCount, aliveNeighbourCount) -> {
-            if (aliveNeighbourCount >= 5) return 1;
+                    return aliveNeighbourCount >= 5 || (!state && aliveNeighbourCount == 3);
+                }
+        ),
 
-            if (state == 0 && aliveNeighbourCount == 3) return 1;
+        // B36/S125
+        LIFE_2x2("Life-2x2",
+                (state, neighbourCount, aliveNeighbourCount) -> {
+                    if (state)
+                        return aliveNeighbourCount == 1 || aliveNeighbourCount == 2 || aliveNeighbourCount == 5;
+                    return aliveNeighbourCount == 3 || aliveNeighbourCount == 6;
+                }
+        ),
 
-            return 0;
-        });
+
+        // B368/S245
+        MORLEY("Life-Morley",
+                (state, neighbourCount, aliveNeighbourCount) -> {
+                    if (state)
+                        return aliveNeighbourCount == 2 || aliveNeighbourCount == 4 || aliveNeighbourCount == 5;
+                    return aliveNeighbourCount == 3 || aliveNeighbourCount == 6 || aliveNeighbourCount == 8;
+                }
+        ),
+
+        // B4678/S35678
+        ANNEAL("Life-Anneal",
+                (state, neighbourCount, aliveNeighbourCount) -> {
+                    if (state)
+                        return aliveNeighbourCount == 3 || aliveNeighbourCount >= 5;
+                    return aliveNeighbourCount == 4 || aliveNeighbourCount >= 6;
+                }
+        ),
+
+        // B3678/S34678
+        DAY_NIGHT("Life-DayNight",
+                (state, neighbourCount, aliveNeighbourCount) -> {
+                    return aliveNeighbourCount == 3 || aliveNeighbourCount >= 6 || (state && aliveNeighbourCount == 4);
+                }
+        );
 
 
         @NotNull
@@ -107,6 +146,16 @@ public class LifeAutomata extends AbstractAutomataI {
         public int colorFor(boolean on, boolean darkMode) {
             return on ? darkMode ? darkColorOn : lightColorOn : darkMode ? darkColorOff : lightColorOff;
         }
+    }
+
+
+
+    private static boolean isCellOn(float state) {
+        return ((int) state) == 1;
+    }
+
+    private static int toCellState(boolean on) {
+        return on ? 1 : 0;
     }
 
 
@@ -140,8 +189,7 @@ public class LifeAutomata extends AbstractAutomataI {
 
     @Override
     public int colorRGBForCell(float cellState, boolean darkMode) {
-        final boolean on = cellState - 0.5 > 0;
-        return rule.colorFor(on, darkMode);
+        return rule.colorFor(isCellOn(cellState), darkMode);
     }
 
     @Override
@@ -157,12 +205,12 @@ public class LifeAutomata extends AbstractAutomataI {
     @Override
     public void subComputeNextState(@NotNull NdArrayF curState, @NotNull NdArrayF outState, boolean wrapEnabled, int row_start, int row_end) {
         final int[][] out_arr = new int[8][2];
-        int cell_state;
+        boolean cell_state, new_state;
         int neigh_count;
 
         for (int i = row_start; i < row_end; i++) {
             for (int j = 0; j < curState.shapeAt(1); j++) {
-                cell_state = (int) curState.get(i, j);
+                cell_state = isCellOn(curState.get(i, j));
                 neigh_count = NdArrayF.getNeighbourIndices2D(curState.shapeAt(0), curState.shapeAt(1), i, j, wrapEnabled, out_arr);
 
                 float neigh_state_sum = 0;
@@ -170,7 +218,8 @@ public class LifeAutomata extends AbstractAutomataI {
                     neigh_state_sum += curState.get(out_arr[k]);
                 }
 
-                outState.set(rule.cellStateProvider.getNewState(cell_state, neigh_count, (int) neigh_state_sum), i, j);
+                new_state = rule.cellStateProvider.getNewState(cell_state, neigh_count, (int) neigh_state_sum);
+                outState.set(toCellState(new_state), i, j);
             }
         }
     }
@@ -188,17 +237,15 @@ public class LifeAutomata extends AbstractAutomataI {
 
     @Override
     public boolean cycleCellState(@NotNull NdArrayF state, int[] cellIndices) {
-        float val = state.get(cellIndices);
-        state.set(val - 0.5 > 0 ? 0 : 1, cellIndices);
+        state.set(toCellState(!isCellOn(state.get(cellIndices))), cellIndices);
         return true;
     }
 
     @Override
     public boolean stepCellState(@NotNull NdArrayF state, int[] cellIndices, boolean stepUp) {
-        float val = state.get(cellIndices);
-        float newVal = stepUp ? 1 : 0;
-        state.set(newVal, cellIndices);
-        return val != newVal;
+        final boolean on = isCellOn(state.get(cellIndices));
+        state.set(toCellState(stepUp), cellIndices);
+        return on != stepUp;
     }
 
     @Override

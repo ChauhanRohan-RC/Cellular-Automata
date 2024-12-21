@@ -14,8 +14,22 @@ import util.models.Pair;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.LinkedList;
+import java.util.List;
 
-
+/**
+ * MOUSE CONTROLS <br>
+ * 1. {@code L-MOUSE [press|drag]} : Increase cell state <br>
+ * 2. {@code SHIFT + L-MOUSE [press|drag]} : Decrease cell state <br>
+ * 3. {@code CTRL + [SHIFT] + L-MOUSE [press|drag]} : Enable snap mode (horizontal, vertical, diagonal) <br>
+ * 4. {@code R-MOUSE [drag]} : Pan <br>
+ * 5. {@code MWHEEL} : Scroll-Y <br>
+ * 6. {@code SHIFT + MWHEEL} : Scroll-X <br>
+ * 6. {@code CTRL + MWHEEL} : Zoom <br>
+ * 
+ * <br>
+ * For keyboard controls, see {@link #keyPressed(KeyEvent)} and {@link #continuousKeyPressed(KeyEvent)}
+ * */
 public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener {
 
     public static final String TAG = "AutomataUi";
@@ -365,32 +379,48 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         return new float[]{(col_index * mCellSizePix) - mPanX, (row_index * mCellSizePix) - mPanY};
     }
 
-
-    private int @Nullable [] stepCellState(float x, float y, boolean stepUp, int @Nullable [] prevCellIndices) {
+    private boolean stepCellState(int @NotNull[] cellIndices, boolean stepUp, int @Nullable [] prevCellIndices) {
         final AutomataSimulator sim = mSimulator;
-        if (sim != null) {
-            final int[] indices = getCellIndices(x, y);
+        if (sim != null && sim.getState().areIndicesValid(cellIndices) && !Arrays.equals(cellIndices, prevCellIndices)) {
+            return sim.stepCellState(cellIndices, stepUp);
+        }
 
-            if (sim.getState().areIndicesValid(indices)) {
-//                invalidateFrame();
-                if (!Arrays.equals(indices, prevCellIndices)) {
-                    boolean changed = sim.stepCellState(indices, stepUp);
-                }
+        return false;
+    }
 
-                return indices;
+
+//    private int @Nullable [] stepCellState(float x, float y, boolean stepUp, int @Nullable [] prevCellIndices) {
+//        return stepCellState(getCellIndices(x, y), stepUp, prevCellIndices);
+//    }
+    
+    /* UNDO ------------------------------- */
+
+    private record CellStepRecord(int @NotNull[] cellIndices, boolean stepUp) { }
+    
+    @NotNull
+    private final LinkedList<List<CellStepRecord>> mCellStepQueue = new LinkedList<>();
+
+    /**
+     * @return numbers of cells whose states have been changed
+     * */
+    private int undoLastCellSteps() {
+        final List<CellStepRecord> last = mCellStepQueue.pollLast();
+        if (last == null || last.isEmpty())
+            return 0;
+
+        int count = 0;
+        for (CellStepRecord rec : last) {
+            if (stepCellState(rec.cellIndices(), !rec.stepUp, null)) {
+                count++;
             }
         }
 
-        return null;
+        return count;
     }
 
-    private void resetZoomAndPan() {
-        mPanX = mPanY = 0;
-        mZoom = 1.0f;
-        invalidateFrame();
-    }
-
-    /* Events and Bindings */
+    
+    
+    /* KEY Events  --------------------------------------- */
 
     /**
      * Enqueue a custom task to be executed on the UI thread
@@ -497,6 +527,12 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                     invalidateFrame();
                 }
             }
+
+            case java.awt.event.KeyEvent.VK_Z -> {
+                if (event.isControlDown()) {
+                    undoLastCellSteps();
+                }
+            }
         }
     }
 
@@ -516,11 +552,153 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     }
 
 
+    /* MOUSE EVENTS  --------------------------------- */
+
     private int @Nullable [] mLastMouseCellIndices;
     private float mPanX;
     private float mPanY;
     @Nullable
     private MouseEvent mPrevPanEvent;
+
+    private int @Nullable[] mStickAnchorIndices;
+    @Nullable
+    private MouseEvent mStickAnchorEvent;
+    private int mStickDragMode;
+    @NotNull
+    private final LinkedList<CellStepRecord> mMouseEventCellStepList = new LinkedList<>();
+    
+    
+    @Override
+    public void mousePressed(MouseEvent event) {
+        super.mousePressed(event);
+
+        final int button = event.getButton();
+        mMouseEventCellStepList.clear();
+
+        if (button == LEFT) {
+            final boolean stepUp = !event.isShiftDown();
+            final int[] cellIndices = getCellIndices(event.getX(), event.getY());
+            final boolean changed = stepCellState(cellIndices, stepUp, null);
+            mLastMouseCellIndices = cellIndices;
+
+            mStickDragMode = 0;
+            if (event.isControlDown()) {
+                mStickAnchorEvent = event;
+                mStickAnchorIndices = cellIndices;
+            } else {
+                mStickAnchorEvent = null;
+                mStickAnchorIndices = null;
+            }
+
+            if (changed) {
+                mMouseEventCellStepList.add(new CellStepRecord(cellIndices, stepUp));
+            }
+        }
+    }
+
+    @Override
+    public void mouseDragged(MouseEvent event) {
+        super.mouseDragged(event);
+
+        final int button = event.getButton();
+
+        if (button == RIGHT) {
+            final MouseEvent prevEvent = mPrevPanEvent;
+            if (prevEvent != null) {
+                handlePan(prevEvent.getX() - event.getX(), prevEvent.getY() - event.getY());
+            }
+
+            mPrevPanEvent = event;
+            return;
+        }
+
+        if (button == LEFT) {
+            final MouseEvent anchorEvent = mStickAnchorEvent;
+            final int[] anchorIndices = mStickAnchorIndices;
+            final int[] cellIndices = getCellIndices(event.getX(), event.getY());
+
+            if (event.isControlDown()) {
+                if (anchorEvent != null && anchorIndices != null) {
+                    if (!Arrays.equals(cellIndices, anchorIndices)) {
+                        if (mStickDragMode == 0) {
+                            final double angle = Math.atan2(Math.abs(event.getY() - anchorEvent.getY()), Math.abs(event.getX() - anchorEvent.getX()));
+                            final double axisAngStick = Math.PI / 18f;
+                            if (angle <= axisAngStick) {
+                                mStickDragMode = 1;     // stick X
+                            } else if (angle >= (Math.PI / 2) - axisAngStick) {
+                                mStickDragMode = 2;     // stick Y
+                            } else {
+                                mStickDragMode = 3;     // Stick Diagonal
+                            }
+                        }
+
+                        if (mStickDragMode == 1) {
+                            cellIndices[0] = anchorIndices[0];      // stick X (match y: rows)
+                        } else if (mStickDragMode == 2) {
+                            cellIndices[1] = anchorIndices[1];      // stick Y (match x: cols)
+                        } else {
+                            int dx = cellIndices[0] - anchorIndices[0];
+                            int dy = cellIndices[1] - anchorIndices[1];
+
+                            final int del = Math.min(Math.abs(dx), Math.abs(dy));
+                            cellIndices[0] = anchorIndices[0] + (U.signum(dx) * del);
+                            cellIndices[1] = anchorIndices[1] + (U.signum(dy) * del);
+                        }
+                    }
+
+                } else {
+                    mStickAnchorEvent = event;
+                    mStickAnchorIndices = cellIndices;
+                    mStickDragMode = 0;
+                }
+            } else {
+                mStickAnchorEvent = null;
+                mStickAnchorIndices = null;
+                mStickDragMode = 0;
+            }
+
+            final boolean stepUp = !event.isShiftDown();
+            final boolean changed = stepCellState(cellIndices, stepUp, mLastMouseCellIndices);
+            mLastMouseCellIndices = cellIndices;
+
+            if (changed) {
+                mMouseEventCellStepList.add(new CellStepRecord(cellIndices, stepUp));
+            }
+        }
+    }
+
+    @Override
+    public void mouseReleased(MouseEvent event) {
+        super.mouseReleased(event);
+
+        if (!mMouseEventCellStepList.isEmpty()) {
+            mCellStepQueue.addLast(new LinkedList<>(mMouseEventCellStepList));
+        }
+
+        // Invalidate
+        mLastMouseCellIndices = null;
+        mPrevPanEvent = null;
+        mStickAnchorEvent = null;
+        mStickAnchorIndices = null;
+        mStickDragMode = 0;
+        mMouseEventCellStepList.clear();
+    }
+
+    @Override
+    public void mouseWheel(MouseEvent event) {
+        super.mouseWheel(event);
+
+        if (event.isControlDown() && mSimulator != null) {
+            stepZoom(event.getCount() < 0);
+        } else if (event.isShiftDown()) {
+            // PAN: X
+            handlePan(event.getCount() * mCellSizePix, 0);
+        } else {
+            // PAN: Y
+            handlePan(0, event.getCount() * mCellSizePix);
+        }
+    }
+
 
     private boolean handlePan(float delPanX, float delPanY) {
         final AutomataSimulator sim = mSimulator;
@@ -569,78 +747,16 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         }
     }
 
-    @Override
-    public void mousePressed(MouseEvent event) {
-        super.mousePressed(event);
-
-        final int button = event.getButton();
-
-        if (event.isControlDown() && button == LEFT) {
-            // TODO: PAN start
-            return;
-        }
-
-        if (button == LEFT) {
-            mLastMouseCellIndices = stepCellState(event.getX(), event.getY(), !event.isShiftDown(), null);
-        }
+    private void resetZoomAndPan() {
+        mPanX = mPanY = 0;
+        mZoom = 1.0f;
+        invalidateFrame();
     }
-
-    @Override
-    public void mouseDragged(MouseEvent event) {
-        super.mouseDragged(event);
-
-        final int button = event.getButton();
-
-        if (event.isControlDown() && button == LEFT) {
-            final MouseEvent prevEvent = mPrevPanEvent;
-            if (prevEvent != null) {
-                handlePan(prevEvent.getX() - event.getX(), prevEvent.getY() - event.getY());
-            }
-
-            mPrevPanEvent = event;
-            return;
-        }
-
-        if (button == LEFT) {
-            mLastMouseCellIndices = stepCellState(event.getX(), event.getY(), !event.isShiftDown(), mLastMouseCellIndices);
-        }
-    }
-
-    @Override
-    public void mouseReleased(MouseEvent event) {
-        super.mouseReleased(event);
-
-        // Invalidate
-        mLastMouseCellIndices = null;
-        mPrevPanEvent = null;
-    }
-
-    @Override
-    public void mouseWheel(MouseEvent event) {
-        super.mouseWheel(event);
-
-        if (event.isControlDown() && mSimulator != null) {
-            stepZoom(event.getCount() < 0);
-        } else if (event.isShiftDown()) {
-            // PAN: X
-            handlePan(event.getCount() * mCellSizePix, 0);
-        } else {
-            // PAN: Y
-            handlePan(0, event.getCount() * mCellSizePix);
-        }
-
-
-//        if (event.getCount() > 0) {
-//            // Scroll Down
-//            Log.d(TAG, "MOUSE_SCROLL_DOWN: " + event.getCount());
-//            mZoom -= 0.01f;
-//        } else {
-//            // Scroll Up
-//            Log.d(TAG, "MOUSE_SCROLL_UP: " + event.getCount());
-//            mZoom += 0.01f;
-//        }
-    }
-
+    
+    
+    
+    /* SIMULATOR  --------------------------------- */
+    
     public @Nullable AutomataSimulator getSimulator() {
         return mSimulator;
     }
@@ -688,7 +804,11 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     @Override
     public void onIsPlayingChanged(@NotNull AutomataSimulator simulator, boolean isPlaying) {
         Log.d(TAG, "SIM_PLAYING: " + isPlaying);
-        postInvalidateFrame();
+        
+        enqueueTask(() -> {
+            mCellStepQueue.clear();
+            invalidateFrame();
+        });
     }
 
     @Override
@@ -737,8 +857,8 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
         final int[] state_shape = {300, 460};
 //        final AutomataI automata = new ZhabotinskyAutomata();
-//        final AutomataI automata = new LifeAutomata(LifeAutomata.Rule.FLAKES);
-        final AutomataI automata = new BrianBrainAutomata();
+        final AutomataI automata = new LifeAutomata(LifeAutomata.Rule.DAY_NIGHT);
+//        final AutomataI automata = new BrianBrainAutomata();
 //        final AutomataI automata = new NLifeAutomata();
 
         final AutomataSimulator simulator = new AutomataSimulator(automata, state_shape, true);
