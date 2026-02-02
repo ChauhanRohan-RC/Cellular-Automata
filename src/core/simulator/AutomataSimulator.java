@@ -404,6 +404,10 @@ public class AutomataSimulator implements WorkSplitter.Listener {
         }
     }
 
+    public void setStateShape(int[] stateShape, boolean initRandomState) {
+        setAutomata(mAutomata, stateShape, initRandomState);
+    }
+
     /* ===================================  SIMULATION  ============================ */
     
     /**

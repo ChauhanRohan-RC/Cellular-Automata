@@ -42,6 +42,12 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
      */
     private static final int ACTION_EXECUTE_RUNNABLE = 121230123;
 
+    /**
+     * Maximum number of frame draw requests at once
+     *
+     * @see #invalidateFrame(int)
+     * */
+    private static final int MAX_FRAME_DRAW_REQUEST = 5;
 
     public enum Theme {
 
@@ -171,9 +177,9 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     private AutomataSimulator mSimulator;
 
 //    boolean playing = false;
-    boolean drawCellStroke = true;
+    boolean mDrawCellStroke = true;
     @NotNull
-    AutomataP2DUi.CellDrawer cellDrawer = CellDrawer.SQUARE;
+    AutomataP2DUi.CellDrawer mCellDrawer = CellDrawer.SQUARE;
 
     float mCellSizePix = 20;
     float mZoom = 1;
@@ -244,9 +250,8 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         invalidateFrame();
     }
 
-
     private void invalidateFrame(int count) {
-        mDrawNextFrameReqCount = min(mDrawNextFrameReqCount + count, 5 /* MAX_DRAW_REQUESTS */);
+        mDrawNextFrameReqCount = min(mDrawNextFrameReqCount + count, MAX_FRAME_DRAW_REQUEST);
     }
 
     private void invalidateFrame() {
@@ -285,12 +290,12 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
             final AutomataI automata = sim.getAutomata();
             final PGraphics graphics = getGraphics();
-            final CellDrawer cell_drawer = this.cellDrawer;
+            final CellDrawer cell_drawer = mCellDrawer;
 
             // Drawing stroke is expensive
             final int strokeColor;
             final float strokeWeight;
-            if (drawCellStroke) {
+            if (mDrawCellStroke) {
                 if (sim.isPlaying()) {
                     strokeColor = theme.foregroundLight;
                     strokeWeight = theme.cellStrokeWeightPlaying;
@@ -304,7 +309,7 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                 strokeWeight = 0;   // No Stroke
             }
 
-            cellDrawer.cellDrawTask.initCellDrawStyle(graphics, strokeWeight, strokeColor);
+            mCellDrawer.cellDrawTask.initCellDrawStyle(graphics, strokeWeight, strokeColor);
 
             float cell_state;
             int cell_color;
@@ -396,7 +401,8 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     /* UNDO ------------------------------- */
 
     private record CellStepRecord(int @NotNull[] cellIndices, boolean stepUp) { }
-    
+
+    // History of cell state changes
     @NotNull
     private final LinkedList<List<CellStepRecord>> mCellStepQueue = new LinkedList<>();
 
@@ -487,25 +493,11 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
                 }
             }
 
-            case java.awt.event.KeyEvent.VK_T -> {
-                // Switch theme
-                mTheme = U.cycleEnum(Theme.class, mTheme);
-                Log.d(TAG, "THEME: " + mTheme);
+            case java.awt.event.KeyEvent.VK_T -> cycleTheme();
 
-                invalidateFrame();
-            }
+            case java.awt.event.KeyEvent.VK_O -> toggleDrawCellStroke();
 
-            case java.awt.event.KeyEvent.VK_O -> {
-                drawCellStroke = !drawCellStroke;
-                Log.d(TAG, "CELL_STROKE: " + drawCellStroke);
-                invalidateFrame();
-            }
-
-            case java.awt.event.KeyEvent.VK_S -> {
-                cellDrawer = U.cycleEnum(CellDrawer.class, cellDrawer);
-                Log.d(TAG, "CELL_SHAPE: " + cellDrawer);
-                invalidateFrame();
-            }
+            case java.awt.event.KeyEvent.VK_S -> cycleCellDrawer();
 
             // Periodic Boundary Condition
             case java.awt.event.KeyEvent.VK_P -> {
@@ -752,10 +744,84 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         mZoom = 1.0f;
         invalidateFrame();
     }
+
+
+    /* Getters and Setters ------------------------------------------------------- */
+
+    @NotNull
+    public Theme getTheme() {
+        return mTheme;
+    }
+
+    public void setTheme(@NotNull Theme theme) {
+        if (mTheme == theme) {
+            return;
+        }
+
+        final Theme old = mTheme;
+        mTheme = theme;
+        onThemeChanged(old, theme);
+    }
+
+    public void cycleTheme() {
+        setTheme(U.cycleEnum(Theme.class, mTheme));
+    }
+
+    protected void onThemeChanged(@NotNull Theme old, @NotNull Theme _new) {
+        Log.d(TAG, "THEME: " + _new);
+        postInvalidateFrame();
+    }
+
+
+    @NotNull
+    public CellDrawer getCellDrawer() {
+        return mCellDrawer;
+    }
+
+    public void setCellDrawer(@NotNull CellDrawer cellDrawer) {
+        if (mCellDrawer == cellDrawer) {
+            return;
+        }
+
+        final CellDrawer old = mCellDrawer;
+        mCellDrawer = cellDrawer;
+        onCellDrawerChanged(old, cellDrawer);
+    }
+
+    public void cycleCellDrawer() {
+        setCellDrawer(U.cycleEnum(CellDrawer.class, mCellDrawer));
+    }
+
+    protected void onCellDrawerChanged(@NotNull CellDrawer old, @NotNull CellDrawer _new) {
+        Log.d(TAG, "CELL_SHAPE: " + _new);
+        postInvalidateFrame();
+    }
+
+
+    public boolean isDrawCellStrokeEnabled() {
+        return mDrawCellStroke;
+    }
+
+    public void setDrawCellStroke(boolean drawCellStroke) {
+        if (mDrawCellStroke == drawCellStroke) {
+            return;
+        }
+
+        mDrawCellStroke = drawCellStroke;
+        onDrawCellStrokeChanged(drawCellStroke);
+    }
+
+    public void toggleDrawCellStroke() {
+        setDrawCellStroke(!isDrawCellStrokeEnabled());
+    }
+
+    protected void onDrawCellStrokeChanged(boolean drawCellStroke) {
+        Log.d(TAG, "CELL_STROKE: " + drawCellStroke);
+        postInvalidateFrame();
+    }
     
     
-    
-    /* SIMULATOR  --------------------------------- */
+    /* SIMULATOR  ------------------------------------------------- */
     
     public @Nullable AutomataSimulator getSimulator() {
         return mSimulator;
@@ -782,13 +848,20 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
 
     protected void onSimulatorChanged(@Nullable AutomataSimulator old, @Nullable AutomataSimulator _new) {
         enqueueTask(() -> {
+            mCellStepQueue.clear();
             resetZoomAndPan();
+//            invalidateFrame();
         });
     }
 
     @Override
     public void onAutomataChanged(@NotNull AutomataSimulator simulator, @NotNull AutomataI oldAutomata, @NotNull AutomataI newAutomata) {
         Log.d(TAG, "AUTOMATA CHANGED: " + oldAutomata + " -> " + newAutomata);
+
+        enqueueTask(() -> {
+            mCellStepQueue.clear();
+            invalidateFrame();
+        });
     }
 
     @Override
@@ -819,12 +892,16 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
     @Override
     public void onWrapEnabledChanged(@NotNull AutomataSimulator simulator, boolean wrapEnabled) {
         Log.d(TAG, "PERIODIC_BC: " + wrapEnabled);
+//        postInvalidateFrame();
     }
 
     @Override
     public void onAutomataStateChanged(AutomataSimulator simulator, @Nullable NdArrayFloatI oldState, @NotNull NdArrayFloatI newState, int generation, int stepInGeneration) {
         Log.d(TAG, "STATE_CHANGED: gen=" + generation + ", step=" + stepInGeneration);
-        postInvalidateFrame();
+        enqueueTask(() -> {
+//            mCellStepQueue.clear();
+            invalidateFrame();
+        });
     }
 
     @Override
@@ -849,15 +926,18 @@ public class AutomataP2DUi extends PApplet implements AutomataSimulator.Listener
         Log.d(TAG, "PARALLEL_COMPUTE_READY: %b [Threads: %d (core), %d (max), %d (workers)]".formatted(simulator.isParallelComputeReady(), simulator.getCoreThreadCount(), simulator.getMaxThreadCount(), simulator.getWorkerThreadCount()));
     }
 
+
+
+
     // ------------------------------------------------
 
     public static void main(String[] args) {
         Log.init();
-        Log.setDebug(false);
+        Log.setDebug(true);
 
-        final int[] state_shape = {300, 460};
+        final int[] state_shape = {300, 460};       // TODO: able to change in UI using simulator.setSTateShape()
 //        final AutomataI automata = new ZhabotinskyAutomata();
-        final AutomataI automata = new LifeAutomata(LifeAutomata.Rule.DAY_NIGHT);
+        final AutomataI automata = new LifeAutomata(LifeAutomata.Rule.CONWAY_LIFE);
 //        final AutomataI automata = new BrianBrainAutomata();
 //        final AutomataI automata = new NLifeAutomata();
 

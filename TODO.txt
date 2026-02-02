@@ -1,5 +1,11 @@
+# Save and load grid state
+
+# Automata Selector
+
+# UI Control Panel -------------------------
 Control these from UI...
-1. simRunMode      -> simulator.setSimulationRunMode()
-2. simFrameRate    -> simulator.setSimulationFrameRate()
+1. simRunMode (Loop, fixed_rate)     -> simulator.setSimulationRunMode()
+    2. simFrameRate (in for simMode: FixedRate)   -> simulator.setSimulationFrameRate()
 3. change Automata -> simulator.setAutomata()
 5. simulator threads -> simulator.setCoreThreadCount() and simulator.setMaxThreadCount()
+# ------------------------------------------

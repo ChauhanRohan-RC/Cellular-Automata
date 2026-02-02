@@ -97,7 +97,7 @@ public class WorkSplitter {
             computeTask.compute(0, totalRows);
         } else {
             LinkedList<Callable<Void>> tasks = new LinkedList<>();
-            int rows_per_worker = totalCells / worker_count;
+            int rows_per_worker = totalRows / worker_count;
 
             for (int i = 0; i < worker_count - 1; i++) {
                 final int row_start = i * rows_per_worker;
